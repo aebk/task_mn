@@ -2,7 +2,7 @@
   "name": "TaskFlow",
   "short_name": "TaskFlow",
   "description": "Personal task manager with dependencies, timer & stats",
-  "start_url": "/index.html",
+  "start_url": "/task_mn/index.html",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#0d0d14",
