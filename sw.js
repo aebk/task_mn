@@ -1,5 +1,5 @@
 const CACHE_NAME = 'taskflow-v1';
-const ASSETS = ['/', '/index.html'];
+const ASSETS = ['/task_mn/', '/task_mn/index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
       const clone = resp.clone();
       caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
       return resp;
-    })).catch(() => caches.match('/index.html'))
+    })).catch(() => caches.match('/task_mn/index.html'))
   );
 });
 
@@ -46,7 +46,7 @@ self.addEventListener('notificationclick', e => {
   e.waitUntil(
     clients.matchAll({ type: 'window' }).then(list => {
       if (list.length) return list[0].focus();
-      return clients.openWindow('/');
+      return clients.openWindow('/task_mn/');
     })
   );
 });
