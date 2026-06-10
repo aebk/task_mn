@@ -1,0 +1,2841 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0d14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TaskFlow</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+<style>
+:root {
+  --bg-base: #0d0d14;
+  --bg-gradient: linear-gradient(135deg,#0d0d14 0%,#12101f 100%);
+  --surface: rgba(255,255,255,0.05);
+  --surface-hover: rgba(255,255,255,0.09);
+  --surface-active: rgba(255,255,255,0.13);
+  --border: rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.15);
+  --accent: #7c3aed;
+  --accent-light: #a78bfa;
+  --accent-glow: rgba(124,58,237,0.35);
+  --accent-glow-strong: rgba(124,58,237,0.55);
+  --text-primary: #f1f0f7;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --danger: #ef4444;
+  --danger-glow: rgba(239,68,68,0.3);
+  --warning: #f59e0b;
+  --success: #10b981;
+  --frozen: #3b82f6;
+  --blur: 16px;
+  --nav-h: 72px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg-gradient);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;font-size:15px;line-height:1.5}
+#app{height:100%;display:flex;flex-direction:column;position:relative;overflow:hidden}
+
+/* SCROLLABLE PAGES */
+.page{position:absolute;inset:0;bottom:calc(var(--nav-h) + var(--safe-bottom));overflow-y:auto;overflow-x:hidden;display:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+.page.active{display:block}
+.page-content{padding:16px 16px calc(16px + 80px) 16px;min-height:100%}
+
+/* BOTTOM NAV */
+#bottom-nav{position:absolute;bottom:0;left:0;right:0;height:calc(var(--nav-h) + var(--safe-bottom));background:rgba(13,13,20,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:flex-start;padding-top:8px;padding-bottom:var(--safe-bottom);z-index:100}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border:none;background:none;color:var(--text-muted);cursor:pointer;transition:color .2s;font-size:10px;letter-spacing:.4px;text-transform:uppercase}
+.nav-btn.active{color:var(--accent-light)}
+.nav-btn svg{width:22px;height:22px;transition:transform .2s}
+.nav-btn.active svg{transform:scale(1.15)}
+
+/* GLASS CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));transition:background .2s,border-color .2s}
+.card:hover{background:var(--surface-hover);border-color:var(--border-hover)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:12px;border:none;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s ease;min-height:44px;letter-spacing:.2px}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 0 20px var(--accent-glow)}
+.btn-primary:hover{background:#6d28d9;box-shadow:0 0 28px var(--accent-glow-strong)}
+.btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text-primary)}
+.btn-ghost:hover{background:var(--surface-hover)}
+.btn-danger{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:var(--danger)}
+.btn-danger:hover{background:rgba(239,68,68,0.25)}
+.btn-sm{padding:7px 14px;font-size:13px;min-height:36px;border-radius:10px}
+.btn-icon{width:44px;height:44px;padding:0;border-radius:12px}
+
+/* FAB */
+#fab{position:absolute;bottom:calc(var(--nav-h) + var(--safe-bottom) + 20px);right:20px;width:56px;height:56px;border-radius:18px;background:var(--accent);border:none;color:#fff;font-size:26px;cursor:pointer;box-shadow:0 0 30px var(--accent-glow-strong),0 4px 16px rgba(0,0,0,0.4);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s}
+#fab:hover{transform:scale(1.07);box-shadow:0 0 40px var(--accent-glow-strong),0 6px 20px rgba(0,0,0,0.5)}
+#fab.hidden{display:none}
+
+/* TIMER PILL */
+#timer-pill{position:absolute;bottom:calc(var(--nav-h) + var(--safe-bottom) + 10px);left:50%;transform:translateX(-50%);background:rgba(13,13,20,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--accent);border-radius:40px;padding:10px 18px;display:none;align-items:center;gap:12px;z-index:95;white-space:nowrap;box-shadow:0 0 20px var(--accent-glow)}
+#timer-pill.active{display:flex}
+#timer-task-name{font-size:13px;color:var(--accent-light);max-width:140px;overflow:hidden;text-overflow:ellipsis}
+#timer-display{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text-primary)}
+.timer-pill-btn{width:30px;height:30px;border-radius:50%;border:none;background:var(--surface-hover);color:var(--text-primary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s}
+.timer-pill-btn:hover{background:var(--surface-active)}
+
+/* MODALS */
+#modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:200;display:none;align-items:flex-end;justify-content:center}
+#modal-overlay.active{display:flex}
+.modal-sheet{background:rgba(18,16,31,0.97);border:1px solid var(--border);border-radius:24px 24px 0 0;width:100%;max-width:600px;max-height:92vh;overflow-y:auto;padding:0 0 calc(24px + var(--safe-bottom)) 0;animation:slideUp .25s ease-out}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-handle{width:40px;height:4px;background:var(--border-hover);border-radius:2px;margin:12px auto 0}
+.modal-header{padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-size:18px;font-weight:600;letter-spacing:-.2px}
+.modal-body{padding:20px}
+.modal-close{width:36px;height:36px;border-radius:10px;border:none;background:var(--surface);color:var(--text-secondary);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center}
+
+/* CONFIRM DIALOG */
+#confirm-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+#confirm-overlay.active{display:flex}
+.confirm-box{background:rgba(18,16,31,0.99);border:1px solid var(--border);border-radius:20px;padding:24px;max-width:340px;width:100%;animation:fadeScale .2s ease-out}
+@keyframes fadeScale{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.confirm-title{font-size:17px;font-weight:600;margin-bottom:8px}
+.confirm-msg{font-size:14px;color:var(--text-secondary);margin-bottom:24px;line-height:1.6}
+.confirm-actions{display:flex;gap:10px}
+.confirm-actions .btn{flex:1}
+
+/* TOASTS */
+#toast-container{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:8px;pointer-events:none;min-width:200px;max-width:340px}
+.toast{background:rgba(18,16,31,0.97);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:14px;color:var(--text-primary);display:flex;align-items:center;gap:10px;animation:toastIn .25s ease-out;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
+.toast.success{border-color:rgba(16,185,129,0.4)}
+.toast.error{border-color:rgba(239,68,68,0.4)}
+.toast.info{border-color:rgba(124,58,237,0.4)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}
+
+/* FORM ELEMENTS */
+.form-group{margin-bottom:16px}
+.form-label{font-size:12px;color:var(--text-secondary);margin-bottom:6px;display:block;letter-spacing:.3px;text-transform:uppercase}
+.form-input,.form-textarea,.form-select{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text-primary);font-size:15px;font-family:inherit;transition:border-color .2s,background .2s;outline:none;-webkit-appearance:none}
+.form-input:focus,.form-textarea:focus,.form-select:focus{border-color:var(--accent-light);background:var(--surface-hover)}
+.form-textarea{resize:vertical;min-height:80px;line-height:1.5}
+.form-select{cursor:pointer}
+.form-select option{background:#1a1730}
+.range-input{width:100%;accent-color:var(--accent);height:6px;border-radius:3px}
+
+/* PRIORITY BUTTONS */
+.priority-group,.weight-group{display:flex;gap:8px}
+.priority-btn,.weight-btn{flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;font-size:13px;text-align:center;transition:all .2s}
+.priority-btn.active[data-val="low"]{background:rgba(16,185,129,0.15);border-color:var(--success);color:var(--success)}
+.priority-btn.active[data-val="medium"]{background:rgba(245,158,11,0.15);border-color:var(--warning);color:var(--warning)}
+.priority-btn.active[data-val="high"]{background:rgba(239,68,68,0.15);border-color:var(--danger);color:var(--danger)}
+.weight-btn.active{background:rgba(124,58,237,0.2);border-color:var(--accent-light);color:var(--accent-light)}
+
+/* CHIPS / TAGS */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:var(--accent-light);font-size:12px;font-weight:500}
+.chip-remove{cursor:pointer;opacity:.7;font-size:14px}
+.chip-remove:hover{opacity:1}
+
+/* TASK CARDS */
+.task-card{padding:14px;margin-bottom:10px;cursor:pointer;position:relative;overflow:hidden;transition:transform .15s,opacity .15s}
+.task-card:active{transform:scale(.99)}
+.task-card.locked{opacity:.55}
+.task-card.locked::after{content:'🔒';position:absolute;top:12px;right:12px;font-size:16px}
+.task-card.frozen{border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.05)}
+.task-card.done{opacity:.6}
+.task-card-header{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.task-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.task-card-title{flex:1;font-size:15px;font-weight:500;line-height:1.4}
+.task-card-title.done-text{text-decoration:line-through;opacity:.7}
+.task-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.meta-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:500}
+.badge-priority-low{background:rgba(16,185,129,0.15);color:var(--success)}
+.badge-priority-medium{background:rgba(245,158,11,0.15);color:var(--warning)}
+.badge-priority-high{background:rgba(239,68,68,0.15);color:var(--danger)}
+.badge-deadline{background:rgba(255,255,255,0.07);color:var(--text-secondary)}
+.badge-deadline.overdue{background:rgba(239,68,68,0.15);color:var(--danger)}
+.badge-time{background:rgba(124,58,237,0.15);color:var(--accent-light)}
+.progress-bar-wrap{height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden}
+.progress-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent-light));transition:width .4s ease}
+.progress-bar-fill.done{background:linear-gradient(90deg,var(--success),#34d399)}
+
+/* STREAK BANNER */
+.streak-banner{background:linear-gradient(135deg,rgba(124,58,237,0.2),rgba(167,139,250,0.1));border:1px solid rgba(124,58,237,0.25);border-radius:16px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:14px}
+.streak-num{font-size:32px;font-weight:700;color:var(--accent-light);line-height:1}
+.streak-label{font-size:13px;color:var(--text-secondary)}
+.streak-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
+
+/* SECTION HEADERS */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:20px}
+.section-title{font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--text-secondary)}
+
+/* SEARCH / FILTER BAR */
+.search-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.search-input-wrap{flex:1;position:relative}
+.search-input-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
+.search-input{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px 10px 38px;color:var(--text-primary);font-size:14px;width:100%;outline:none;transition:border-color .2s}
+.search-input:focus{border-color:var(--accent-light)}
+.filter-btn{width:44px;height:44px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.filter-btn.active{border-color:var(--accent-light);color:var(--accent-light);background:rgba(124,58,237,0.15)}
+
+/* SORT/FILTER STRIP */
+.filter-strip{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.filter-strip::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);font-size:13px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.filter-chip.active{background:rgba(124,58,237,0.2);border-color:var(--accent-light);color:var(--accent-light)}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-secondary)}
+.empty-icon{font-size:56px;margin-bottom:16px;opacity:.5}
+.empty-title{font-size:17px;font-weight:600;color:var(--text-primary);margin-bottom:8px}
+.empty-desc{font-size:14px;line-height:1.6;margin-bottom:24px}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{padding:16px;text-align:center}
+.stat-num{font-size:26px;font-weight:700;color:var(--accent-light)}
+.stat-label{font-size:11px;color:var(--text-secondary);margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
+
+/* HEATMAP */
+.heatmap-grid{display:grid;grid-template-columns:repeat(16,1fr);gap:3px;margin-bottom:8px}
+.heatmap-cell{aspect-ratio:1;border-radius:3px;background:rgba(255,255,255,0.05);cursor:pointer;transition:transform .15s}
+.heatmap-cell:hover{transform:scale(1.2)}
+.heatmap-cell[data-v="1"]{background:rgba(124,58,237,0.25)}
+.heatmap-cell[data-v="2"]{background:rgba(124,58,237,0.45)}
+.heatmap-cell[data-v="3"]{background:rgba(124,58,237,0.65)}
+.heatmap-cell[data-v="4"]{background:rgba(124,58,237,0.85)}
+
+/* TREE */
+#tree-container{width:100%;height:calc(100vh - var(--nav-h) - var(--safe-bottom) - 60px);overflow:auto;position:relative;cursor:grab}
+#tree-container:active{cursor:grabbing}
+#tree-svg{min-width:100%;min-height:100%}
+
+/* SETTINGS */
+.settings-section{margin-bottom:28px}
+.settings-section-title{font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--accent-light);margin-bottom:12px;padding:0 2px}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;margin-bottom:6px;border-radius:12px;background:var(--surface);border:1px solid var(--border)}
+.settings-row-left{flex:1}
+.settings-row-title{font-size:14px;font-weight:500}
+.settings-row-desc{font-size:12px;color:var(--text-secondary);margin-top:2px}
+.toggle{width:48px;height:28px;border-radius:14px;background:rgba(255,255,255,0.1);border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;width:22px;height:22px;border-radius:11px;background:#fff;top:3px;left:3px;transition:transform .2s;box-shadow:0 2px 4px rgba(0,0,0,0.3)}
+.toggle.on::after{transform:translateX(20px)}
+
+/* ACCENT PICKER */
+.accent-swatches{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.swatch{width:36px;height:36px;border-radius:10px;border:2px solid transparent;cursor:pointer;transition:transform .15s,border-color .15s}
+.swatch.active{border-color:#fff;transform:scale(1.15)}
+.swatch:hover{transform:scale(1.1)}
+
+/* PROGRESS ACTIONS */
+.prog-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.prog-btn{flex:1;min-width:60px;padding:8px 6px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);font-size:13px;cursor:pointer;text-align:center;transition:all .2s}
+.prog-btn:hover{background:var(--surface-hover);border-color:var(--accent-light)}
+
+/* CONTEXT MENU */
+#ctx-menu{position:absolute;background:rgba(18,16,31,0.97);border:1px solid var(--border);border-radius:14px;padding:8px;z-index:250;display:none;min-width:200px;box-shadow:0 8px 40px rgba(0,0,0,0.5);animation:fadeScale .15s ease-out}
+#ctx-menu.active{display:block}
+.ctx-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:14px;color:var(--text-primary);transition:background .15s}
+.ctx-item:hover{background:var(--surface-hover)}
+.ctx-item.danger{color:var(--danger)}
+.ctx-item svg{opacity:.7}
+
+/* NOTES LIST */
+.note-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;position:relative}
+.note-text{font-size:14px;line-height:1.5}
+.note-date{font-size:11px;color:var(--text-muted);margin-top:6px}
+.note-del{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.note-del:hover{background:rgba(239,68,68,0.15);color:var(--danger)}
+
+/* CHART CANVAS */
+.chart-wrap{position:relative;height:180px;margin-bottom:16px}
+canvas.chart{width:100%!important;height:100%!important}
+
+/* DEPENDENCY TAG */
+.dep-tag{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);font-size:12px;color:var(--text-secondary);margin:3px}
+.dep-tag-remove{cursor:pointer;color:var(--danger);font-size:14px}
+
+/* PAGE HEADER */
+.page-header{padding:20px 16px 0;display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.page-h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.page-sub{font-size:13px;color:var(--text-secondary);padding:0 16px;margin-bottom:8px}
+
+/* SWIPE */
+.task-card-wrap{position:relative;overflow:hidden;border-radius:16px;margin-bottom:10px}
+.task-card-actions{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:stretch}
+.swipe-action{display:flex;align-items:center;justify-content:center;padding:0 20px;font-size:13px;font-weight:500;gap:6px;min-width:80px}
+.swipe-drop{background:var(--danger);color:#fff;border-radius:0 16px 16px 0}
+.swipe-freeze{background:var(--frozen);color:#fff;border-radius:0 16px 16px 0}
+.task-card-inner{background:var(--bg-base);border-radius:16px;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease}
+
+/* COMPACT MODE */
+body.compact .task-card{padding:10px!important}
+body.compact .task-card-header{margin-bottom:6px}
+body.compact .task-meta{margin-bottom:6px;gap:4px}
+body.compact .task-icon{width:30px!important;height:30px!important;font-size:15px!important}
+body.compact .task-card-title{font-size:14px}
+
+/* TREE NODES */
+.tree-node rect{transition:opacity .15s}
+.tree-node:hover rect:first-of-type{opacity:.8}
+
+/* SKELETON */
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,var(--surface-hover) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px;height:16px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* QUICK STATS */
+#quick-stats-widget{animation:fadeIn .3s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* RESPONSIVE */
+@media(min-width:600px){
+  #app{max-width:480px;margin:0 auto;box-shadow:0 0 80px rgba(0,0,0,0.8)}
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-hover);border-radius:2px}
+
+/* TRANSITIONS for pages */
+.page{transition:opacity .2s}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- PAGES -->
+  <div id="page-home" class="page active">
+    <div class="page-header">
+      <div>
+        <div class="page-h1">TaskFlow</div>
+        <div id="home-date" style="font-size:13px;color:var(--text-secondary)"></div>
+      </div>
+      <div id="streak-chip" style="display:none;background:rgba(124,58,237,0.2);border:1px solid rgba(124,58,237,0.3);border-radius:20px;padding:6px 14px;font-size:14px;font-weight:600;color:var(--accent-light)"></div>
+    </div>
+    <div class="page-content">
+      <div class="search-bar">
+        <div class="search-input-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input class="search-input" id="search-input" placeholder="Поиск задач…">
+        </div>
+        <button class="filter-btn" id="filter-toggle-btn" title="Фильтры">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+        </button>
+      </div>
+      <div class="filter-strip" id="filter-strip" style="display:none">
+        <span class="filter-chip active" data-filter="all">Все</span>
+        <span class="filter-chip" data-filter="active">Активные</span>
+        <span class="filter-chip" data-filter="done">Выполнено</span>
+        <span class="filter-chip" data-filter="frozen">Заморожено</span>
+        <span class="filter-chip" data-filter="high">Высокий приоритет</span>
+        <span class="filter-chip" data-filter="overdue">Просрочено</span>
+      </div>
+      <div class="filter-strip" id="sort-strip">
+        <span class="filter-chip active" data-sort="default">По умолчанию</span>
+        <span class="filter-chip" data-sort="deadline">Дедлайн</span>
+        <span class="filter-chip" data-sort="priority">Приоритет</span>
+        <span class="filter-chip" data-sort="progress">Прогресс</span>
+        <span class="filter-chip" data-sort="category">Категория</span>
+      </div>
+      <div id="tasks-list"></div>
+    </div>
+  </div>
+
+  <div id="page-tree" class="page">
+    <div class="page-header"><div class="page-h1">Дерево задач</div>
+      <select id="tree-filter-sel" class="form-select" style="width:auto;padding:8px 12px;font-size:13px">
+        <option value="">Все задачи</option>
+      </select>
+    </div>
+    <div id="tree-container">
+      <svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+  <div id="page-stats" class="page">
+    <div class="page-header"><div class="page-h1">Статистика</div></div>
+    <div class="page-content">
+      <div id="stats-summary" class="stat-grid"></div>
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div class="section-header" style="margin-top:0">
+          <span class="section-title">Активность (16 недель)</span>
+          <div style="display:flex;gap:6px">
+            <span class="filter-chip active" data-hmap="tasks" style="padding:4px 10px">Задачи</span>
+            <span class="filter-chip" data-hmap="points" style="padding:4px 10px">Очки</span>
+          </div>
+        </div>
+        <div class="heatmap-grid" id="heatmap"></div>
+        <div id="heatmap-tip" style="font-size:12px;color:var(--text-muted);text-align:center;margin-top:6px">Нажмите на день для деталей</div>
+      </div>
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div class="section-header" style="margin-top:0"><span class="section-title">Очки за 30 дней</span></div>
+        <div class="chart-wrap"><canvas id="chart-points"></canvas></div>
+      </div>
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div class="section-header" style="margin-top:0"><span class="section-title">Время по категориям</span></div>
+        <div class="chart-wrap"><canvas id="chart-categories"></canvas></div>
+      </div>
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div class="section-header" style="margin-top:0"><span class="section-title">Задачи по статусу</span></div>
+        <div class="chart-wrap" style="height:200px"><canvas id="chart-status"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-settings" class="page">
+    <div class="page-header"><div class="page-h1">Настройки</div></div>
+    <div class="page-content">
+
+      <div class="settings-section">
+        <div class="settings-section-title">Внешний вид</div>
+        <div class="card" style="padding:16px;margin-bottom:10px">
+          <div class="form-label" style="margin-bottom:10px">Акцентный цвет</div>
+          <div class="accent-swatches" id="accent-swatches"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Интенсивность размытия</div></div>
+          <select id="blur-select" class="form-select" style="width:130px">
+            <option value="8">Лёгкий</option>
+            <option value="16" selected>Средний</option>
+            <option value="28">Сильный</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Размер текста</div></div>
+          <select id="fontsize-select" class="form-select" style="width:130px">
+            <option value="13">Маленький</option>
+            <option value="15" selected>Средний</option>
+            <option value="17">Большой</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Компактный режим</div><div class="settings-row-desc">Уменьшает отступы в карточках</div></div>
+          <button class="toggle" id="toggle-compact" data-key="compact"></button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Фокус-режим</div><div class="settings-row-desc">Показать только одну задачу</div></div>
+          <button class="toggle" id="toggle-focus" data-key="focusMode"></button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Отображение задач</div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Показывать выполненные</div></div>
+          <button class="toggle" id="toggle-show-done" data-key="showDone"></button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Показывать замороженные</div></div>
+          <button class="toggle" id="toggle-show-frozen" data-key="showFrozen"></button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Группировать по категориям</div></div>
+          <button class="toggle" id="toggle-group-cat" data-key="groupByCat"></button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Уведомления</div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Все уведомления</div></div>
+          <button class="toggle" id="toggle-notif" data-key="notifEnabled"></button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Время до дедлайна (мин)</div></div>
+          <input type="number" id="notif-before" class="form-input" style="width:80px;text-align:center" min="5" max="1440" value="30">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Интервал назойливых (мин)</div></div>
+          <input type="number" id="notif-interval" class="form-input" style="width:80px;text-align:center" min="5" max="120" value="15">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Streak под угрозой (время)</div></div>
+          <input type="time" id="streak-warn-time" class="form-input" style="width:120px" value="21:00">
+        </div>
+        <div style="padding:4px 2px">
+          <button class="btn btn-ghost btn-sm" id="btn-request-notif">🔔 Разрешить уведомления</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Pomodoro</div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Рабочий интервал (мин)</div></div>
+          <input type="number" id="pomo-work" class="form-input" style="width:70px;text-align:center" min="1" max="90" value="25">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Короткий перерыв (мин)</div></div>
+          <input type="number" id="pomo-short" class="form-input" style="width:70px;text-align:center" min="1" max="30" value="5">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Длинный перерыв (мин)</div></div>
+          <input type="number" id="pomo-long" class="form-input" style="width:70px;text-align:center" min="5" max="60" value="15">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-left"><div class="settings-row-title">Помидоров до длинного</div></div>
+          <input type="number" id="pomo-count" class="form-input" style="width:70px;text-align:center" min="2" max="10" value="4">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Категории</div>
+        <div id="categories-list" style="margin-bottom:10px"></div>
+        <button class="btn btn-ghost btn-sm" id="btn-add-category">+ Добавить категорию</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Данные</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-ghost" id="btn-export">📤 Экспорт данных (JSON)</button>
+          <button class="btn btn-ghost" id="btn-import">📥 Импорт данных</button>
+          <input type="file" id="import-file" accept=".json" style="display:none">
+          <button class="btn btn-danger" id="btn-clear-data">🗑️ Очистить все данные</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="bottom-nav">
+    <button class="nav-btn active" data-page="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+      Главная
+    </button>
+    <button class="nav-btn" data-page="tree">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M8.5 17.5l3.5-6.5M15.5 17.5L12 11"/></svg>
+      Дерево
+    </button>
+    <button class="nav-btn" data-page="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+      Статистика
+    </button>
+    <button class="nav-btn" data-page="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Настройки
+    </button>
+  </nav>
+
+  <!-- FAB -->
+  <button id="fab" title="Новая задача">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <!-- TIMER PILL -->
+  <div id="timer-pill">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+    <span id="timer-task-name">Task</span>
+    <span id="timer-display">00:00</span>
+    <button class="timer-pill-btn" id="timer-pause-btn" title="Пауза">⏸</button>
+    <button class="timer-pill-btn" id="timer-stop-btn" title="Стоп">⏹</button>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal-overlay">
+    <div class="modal-sheet" id="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title">Задача</div>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- CONFIRM -->
+  <div id="confirm-overlay">
+    <div class="confirm-box">
+      <div class="confirm-title" id="confirm-title">Подтверждение</div>
+      <div class="confirm-msg" id="confirm-msg"></div>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost" id="confirm-cancel">Отмена</button>
+        <button class="btn btn-danger" id="confirm-ok">Подтвердить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTEXT MENU -->
+  <div id="ctx-menu">
+    <div class="ctx-item" id="ctx-edit">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Редактировать
+    </div>
+    <div class="ctx-item" id="ctx-timer">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+      Запустить таймер
+    </div>
+    <div class="ctx-item" id="ctx-progress">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,8 12,12 14,14"/></svg>
+      Отметить прогресс
+    </div>
+    <div class="ctx-item" id="ctx-freeze">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/></svg>
+      Заморозить
+    </div>
+    <div class="ctx-item danger" id="ctx-drop">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      Бросить
+    </div>
+    <div class="ctx-item danger" id="ctx-delete">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2,0,01-2,2H7a2,2,0,01-2-2V6m3,0V4a2,2,0,012-2h4a2,2,0,012,2v2"/></svg>
+      Удалить
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+</div>
+
+<script>
+// ==================== DATABASE ====================
+const db = new Dexie('taskflow');
+db.version(1).stores({
+  tasks: '++id,status,category_id,priority,created_at,deadline',
+  categories: '++id,name',
+  settings: 'key',
+  history: '++id,date,task_id,points,type'
+});
+
+// ==================== STATE ====================
+const S = {
+  tasks: [],
+  categories: [],
+  settings: {},
+  activeTimer: null, // { taskId, start, elapsed, interval, paused }
+  currentPage: 'home',
+  ctxTaskId: null,
+  currentSort: 'default',
+  currentFilter: 'all',
+  searchQuery: '',
+  pomodoroCount: 0,
+  pomodoroPhase: 'work', // work|short|long
+  charts: {}
+};
+
+const DEFAULT_SETTINGS = {
+  accent: '#7c3aed',
+  blur: 16,
+  fontSize: 15,
+  compact: false,
+  focusMode: false,
+  showDone: true,
+  showFrozen: true,
+  groupByCat: false,
+  notifEnabled: false,
+  notifBefore: 30,
+  notifInterval: 15,
+  streakWarnTime: '21:00',
+  pomoWork: 25,
+  pomoShort: 5,
+  pomoLong: 15,
+  pomoCount: 4,
+  defaultSort: 'default'
+};
+
+const ACCENT_PRESETS = [
+  '#7c3aed','#2563eb','#db2777','#059669','#ea580c','#dc2626','#0891b2','#d97706'
+];
+
+const PRIORITY_POINTS = { low: 1.0, medium: 1.3, high: 1.7 };
+const WEIGHT_POINTS = { easy: 10, medium: 25, hard: 50 };
+
+// ==================== INIT ====================
+async function init() {
+  await loadSettings();
+  await loadData();
+  applySettings();
+  setupNav();
+  setupFAB();
+  setupModal();
+  setupContextMenu();
+  setupTimer();
+  setupSwipe();
+  renderHome();
+  renderSettingsUI();
+  updateStreakChip();
+  registerSW();
+
+  // Date display
+  document.getElementById('home-date').textContent = new Date().toLocaleDateString('ru-RU', {
+    weekday:'long', day:'numeric', month:'long'
+  });
+
+  // Settings event listeners
+  setupSettingsListeners();
+}
+
+async function loadSettings() {
+  const rows = await db.settings.toArray();
+  S.settings = { ...DEFAULT_SETTINGS };
+  rows.forEach(r => S.settings[r.key] = r.value);
+}
+
+async function saveSetting(key, value) {
+  S.settings[key] = value;
+  await db.settings.put({ key, value });
+}
+
+async function loadData() {
+  S.tasks = await db.tasks.toArray();
+  S.categories = await db.categories.toArray();
+}
+
+function applySettings() {
+  const r = document.documentElement.style;
+  r.setProperty('--accent', S.settings.accent);
+  // Compute accent-light from accent
+  r.setProperty('--accent-light', lightenHex(S.settings.accent, 40));
+  r.setProperty('--accent-glow', hexToRgba(S.settings.accent, 0.35));
+  r.setProperty('--accent-glow-strong', hexToRgba(S.settings.accent, 0.55));
+  r.setProperty('--blur', S.settings.blur + 'px');
+  document.body.style.fontSize = S.settings.fontSize + 'px';
+  if (S.settings.compact) document.body.classList.add('compact');
+  else document.body.classList.remove('compact');
+}
+
+// ==================== ROUTER ====================
+function setupNav() {
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => navigate(btn.dataset.page));
+  });
+}
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector(`.nav-btn[data-page="${page}"]`).classList.add('active');
+  S.currentPage = page;
+
+  const fab = document.getElementById('fab');
+  fab.classList.toggle('hidden', page !== 'home');
+
+  if (page === 'tree') renderTree();
+  if (page === 'stats') renderStats();
+  if (page === 'settings') renderCategoriesList();
+}
+
+// ==================== TASKS CRUD ====================
+async function createTask(data) {
+  const task = {
+    title: data.title || 'Без названия',
+    description: data.description || '',
+    category_id: data.category_id || null,
+    tags: data.tags || [],
+    priority: data.priority || 'medium',
+    weight: data.weight || 'medium',
+    status: 'active',
+    progress: data.progress || 0,
+    parent_ids: data.parent_ids || [],
+    notes: data.notes || [],
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    deadline: data.deadline || null,
+    time_spent: 0,
+    timer_sessions: [],
+    is_recurring: data.is_recurring || false,
+    recurrence: data.recurrence || null,
+    reminder: data.reminder || { enabled: false, minutes_before: 30, aggressive: false, interval_minutes: 15 },
+    streak: 0,
+    target_time: data.target_time || null,
+    points_earned: 0
+  };
+  const id = await db.tasks.add(task);
+  task.id = id;
+  S.tasks.push(task);
+  scheduleTaskReminder(task);
+  toast('Задача создана', 'success');
+  renderHome();
+  return task;
+}
+
+async function updateTask(id, updates) {
+  updates.updated_at = Date.now();
+  await db.tasks.update(id, updates);
+  const idx = S.tasks.findIndex(t => t.id === id);
+  if (idx > -1) Object.assign(S.tasks[idx], updates);
+  renderHome();
+  if (S.currentPage === 'tree') renderTree();
+}
+
+async function deleteTask(id) {
+  await db.tasks.delete(id);
+  S.tasks = S.tasks.filter(t => t.id !== id);
+  toast('Задача удалена');
+  renderHome();
+}
+
+async function completeTask(task) {
+  if (task.status === 'done') return;
+  const pts = calcPoints(task);
+  await updateTask(task.id, { status: 'done', progress: 100 });
+  await db.history.add({ date: todayStr(), task_id: task.id, points: pts, type: 'done' });
+  updateStreak();
+  toast(`✅ Выполнено! +${pts} очков`, 'success');
+  renderHome();
+}
+
+async function dropTask(task) {
+  const pts = -Math.round(WEIGHT_POINTS[task.weight] * 0.5);
+  await updateTask(task.id, { status: 'dropped' });
+  await db.history.add({ date: todayStr(), task_id: task.id, points: pts, type: 'dropped' });
+  toast('Задача брошена', 'error');
+}
+
+async function freezeTask(task) {
+  const newStatus = task.status === 'frozen' ? 'active' : 'frozen';
+  await updateTask(task.id, { status: newStatus });
+  toast(newStatus === 'frozen' ? '❄️ Заморожено' : '▶️ Возобновлено', 'info');
+}
+
+function calcPoints(task) {
+  let pts = WEIGHT_POINTS[task.weight] || 25;
+  pts *= PRIORITY_POINTS[task.priority] || 1;
+  if (task.deadline && Date.now() > task.deadline) {
+    const days = Math.floor((Date.now() - task.deadline) / 86400000);
+    pts -= days * 5;
+  }
+  return Math.max(1, Math.round(pts));
+}
+
+function isTaskLocked(task) {
+  if (!task.parent_ids || !task.parent_ids.length) return false;
+  return task.parent_ids.some(pid => {
+    const parent = S.tasks.find(t => t.id === pid);
+    return parent && parent.progress < 100;
+  });
+}
+
+// ==================== RENDER HOME ====================
+function renderHome() {
+  const list = document.getElementById('tasks-list');
+  let tasks = [...S.tasks];
+
+  // Filter
+  const f = S.currentFilter;
+  if (f === 'active') tasks = tasks.filter(t => t.status === 'active' || t.status === 'frozen');
+  else if (f === 'done') tasks = tasks.filter(t => t.status === 'done');
+  else if (f === 'frozen') tasks = tasks.filter(t => t.status === 'frozen');
+  else if (f === 'high') tasks = tasks.filter(t => t.priority === 'high');
+  else if (f === 'overdue') tasks = tasks.filter(t => t.deadline && Date.now() > t.deadline && t.status !== 'done');
+  else {
+    // all: apply show settings
+    if (!S.settings.showDone) tasks = tasks.filter(t => t.status !== 'done');
+    if (!S.settings.showFrozen) tasks = tasks.filter(t => t.status !== 'frozen');
+    tasks = tasks.filter(t => t.status !== 'dropped');
+  }
+
+  // Search
+  if (S.searchQuery) {
+    const q = S.searchQuery.toLowerCase();
+    tasks = tasks.filter(t =>
+      t.title.toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q) ||
+      t.notes.some(n => n.text.toLowerCase().includes(q))
+    );
+  }
+
+  // Focus mode
+  if (S.settings.focusMode) {
+    const activeOne = tasks.find(t => t.status === 'active' && !isTaskLocked(t));
+    tasks = activeOne ? [activeOne] : tasks.slice(0, 1);
+  }
+
+  // Sort
+  const sortBy = S.currentSort;
+  if (sortBy === 'deadline') tasks.sort((a, b) => (a.deadline || Infinity) - (b.deadline || Infinity));
+  else if (sortBy === 'priority') {
+    const po = { high: 0, medium: 1, low: 2 };
+    tasks.sort((a, b) => (po[a.priority] || 1) - (po[b.priority] || 1));
+  } else if (sortBy === 'progress') tasks.sort((a, b) => a.progress - b.progress);
+  else if (sortBy === 'category') tasks.sort((a, b) => (a.category_id || 0) - (b.category_id || 0));
+
+  if (!tasks.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">✨</div>
+      <div class="empty-title">Задач пока нет</div>
+      <div class="empty-desc">Нажмите + чтобы создать первую задачу и начать отслеживать прогресс</div>
+      <button class="btn btn-primary" onclick="openTaskForm()">Создать задачу</button>
+    </div>`;
+    return;
+  }
+
+  // Group by category
+  if (S.settings.groupByCat) {
+    const groups = {};
+    tasks.forEach(t => {
+      const key = t.category_id || 0;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+    let html = '';
+    for (const [catId, catTasks] of Object.entries(groups)) {
+      const cat = S.categories.find(c => c.id == catId);
+      html += `<div class="section-header"><span class="section-title">${cat ? cat.icon + ' ' + cat.name : 'Без категории'}</span></div>`;
+      html += catTasks.map(t => renderTaskCard(t)).join('');
+    }
+    list.innerHTML = html;
+  } else {
+    list.innerHTML = tasks.map(t => renderTaskCard(t)).join('');
+  }
+
+  // Bind events
+  list.querySelectorAll('.task-card').forEach(el => {
+    const id = +el.dataset.id;
+    el.addEventListener('click', () => openTaskDetail(id));
+    let longPressTimer;
+    el.addEventListener('touchstart', () => {
+      longPressTimer = setTimeout(() => openContextMenu(id, el), 600);
+    }, { passive: true });
+    el.addEventListener('touchend', () => clearTimeout(longPressTimer));
+    el.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+    el.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(id, el); });
+  });
+
+  setupSwipeGestures();
+  // Render quick stats widget above the task list
+  if (typeof renderQuickStats === 'function') renderQuickStats();
+}
+
+function renderTaskCard(task) {
+  const cat = S.categories.find(c => c.id === task.category_id);
+  const locked = isTaskLocked(task);
+  const overdue = task.deadline && Date.now() > task.deadline && task.status !== 'done';
+  const timeStr = task.time_spent ? formatTime(task.time_spent) : '';
+  const compact = S.settings.compact;
+
+  let statusClass = '';
+  if (task.status === 'frozen') statusClass = 'frozen';
+  if (task.status === 'done') statusClass = 'done';
+  if (locked && task.status !== 'done') statusClass += ' locked';
+
+  const deadlineBadge = task.deadline ? `<span class="meta-badge badge-deadline${overdue ? ' overdue' : ''}">${overdue ? '⚠️' : '📅'} ${formatDate(task.deadline)}</span>` : '';
+  const timeBadge = timeStr ? `<span class="meta-badge badge-time">⏱ ${timeStr}</span>` : '';
+  const priorityBadge = `<span class="meta-badge badge-priority-${task.priority}">${task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟡' : '🟢'} ${task.priority}</span>`;
+  const tagHtml = task.tags.slice(0, 2).map(t => `<span class="chip" style="font-size:11px;padding:2px 7px">#${t}</span>`).join('');
+
+  return `<div class="task-card-wrap">
+    <div class="task-card card ${statusClass}" data-id="${task.id}" style="${compact ? 'padding:10px' : ''}">
+      <div class="task-card-header">
+        <div class="task-icon" style="background:${cat ? cat.color + '22' : 'var(--surface)'}">
+          ${cat ? cat.icon : '📋'}
+        </div>
+        <div style="flex:1">
+          <div class="task-card-title${task.status === 'done' ? ' done-text' : ''}">${esc(task.title)}</div>
+          ${task.description && !compact ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(task.description)}</div>` : ''}
+        </div>
+      </div>
+      <div class="task-meta">
+        ${priorityBadge}${deadlineBadge}${timeBadge}${tagHtml}
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill${task.progress >= 100 ? ' done' : ''}" style="width:${task.progress}%"></div>
+      </div>
+      ${!compact ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right">${task.progress}%</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// ==================== TASK DETAIL MODAL ====================
+async function openTaskDetail(id) {
+  const task = S.tasks.find(t => t.id === id);
+  if (!task) return;
+  const cat = S.categories.find(c => c.id === task.category_id);
+  const locked = isTaskLocked(task);
+  const parents = (task.parent_ids || []).map(pid => S.tasks.find(t => t.id === pid)).filter(Boolean);
+
+  showModal('Детали задачи', `
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div class="task-icon" style="width:48px;height:48px;font-size:24px;background:${cat ? cat.color + '22' : 'var(--surface)'}">
+          ${cat ? cat.icon : '📋'}
+        </div>
+        <div>
+          <div style="font-size:18px;font-weight:600">${esc(task.title)}</div>
+          <div style="font-size:13px;color:var(--text-secondary)">${cat ? cat.name : 'Без категории'} · ${task.status}</div>
+        </div>
+      </div>
+      ${task.description ? `<div style="font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px">${esc(task.description)}</div>` : ''}
+      
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <span class="meta-badge badge-priority-${task.priority}">${task.priority}</span>
+        <span class="meta-badge" style="background:rgba(255,255,255,0.07);color:var(--text-secondary)">${task.weight}</span>
+        ${task.deadline ? `<span class="meta-badge badge-deadline">${formatDate(task.deadline)}</span>` : ''}
+        ${task.time_spent ? `<span class="meta-badge badge-time">⏱ ${formatTime(task.time_spent)}</span>` : ''}
+      </div>
+
+      ${locked ? `<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--danger);margin-bottom:14px">🔒 Заблокировано зависимостями</div>` : ''}
+
+      ${parents.length ? `<div style="margin-bottom:14px"><div class="form-label">Зависит от</div>${parents.map(p => `<span class="dep-tag">${p.progress >= 100 ? '✅' : '⬜'} ${esc(p.title)}</span>`).join('')}</div>` : ''}
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:500">Прогресс</span>
+        <span style="font-size:13px;color:var(--accent-light);font-weight:600">${task.progress}%</span>
+      </div>
+      <div class="progress-bar-wrap" style="height:8px;margin-bottom:12px">
+        <div class="progress-bar-fill${task.progress>=100?' done':''}" style="width:${task.progress}%"></div>
+      </div>
+      <div class="prog-actions">
+        <button class="prog-btn" onclick="quickProgress(${task.id},10)">+10%</button>
+        <button class="prog-btn" onclick="quickProgress(${task.id},25)">+25%</button>
+        <button class="prog-btn" onclick="quickProgress(${task.id},50)">+50%</button>
+        <button class="prog-btn" onclick="quickProgress(${task.id},100)" style="background:rgba(16,185,129,0.15);border-color:var(--success);color:var(--success)">✓ 100%</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-ghost btn-sm" onclick="startTimer(${task.id})">⏱ Таймер</button>
+      <button class="btn btn-ghost btn-sm" onclick="freezeTask(S.tasks.find(t=>t.id===${task.id}))">❄️ ${task.status === 'frozen' ? 'Разморозить' : 'Заморозить'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="openTaskForm(${task.id})">✏️ Изменить</button>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-danger btn-sm" style="flex:1" onclick="confirmDrop(${task.id})">Бросить</button>
+      <button class="btn btn-danger btn-sm" style="flex:1" onclick="confirmDelete(${task.id})">Удалить</button>
+    </div>
+
+    <!-- NOTES -->
+    <div style="margin-bottom:16px">
+      <div class="section-header" style="margin-top:0"><span class="section-title">Заметки (${task.notes.length})</span></div>
+      <div id="notes-list">${task.notes.map(n => renderNote(n, task.id)).join('')}</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input class="form-input" id="new-note-input" placeholder="Добавить заметку…" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="addNote(${task.id})">+</button>
+      </div>
+    </div>
+
+    <!-- TIMER SESSIONS -->
+    ${task.timer_sessions.length ? `
+    <div>
+      <div class="section-header" style="margin-top:0"><span class="section-title">Сессии таймера</span></div>
+      ${task.timer_sessions.slice(-5).reverse().map(s => `
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text-secondary)">
+          <span>${new Date(s.start).toLocaleDateString('ru-RU', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+          <span style="color:var(--accent-light)">${formatTime(s.duration)}</span>
+        </div>
+      `).join('')}
+    </div>` : ''}
+  `);
+}
+
+function renderNote(note, taskId) {
+  return `<div class="note-item" id="note-${note.id}">
+    <button class="note-del" onclick="deleteNote(${taskId},'${note.id}')">×</button>
+    <div class="note-text">${esc(note.text)}</div>
+    <div class="note-date">${new Date(note.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+  </div>`;
+}
+
+async function addNote(taskId) {
+  const input = document.getElementById('new-note-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const task = S.tasks.find(t => t.id === taskId);
+  const note = { id: Date.now().toString(36), text, created_at: Date.now() };
+  const notes = [...task.notes, note];
+  await updateTask(taskId, { notes });
+  input.value = '';
+  const nl = document.getElementById('notes-list');
+  if (nl) nl.innerHTML = notes.map(n => renderNote(n, taskId)).join('');
+  toast('Заметка добавлена', 'success');
+}
+
+async function deleteNote(taskId, noteId) {
+  const task = S.tasks.find(t => t.id === taskId);
+  const notes = task.notes.filter(n => n.id !== noteId);
+  await updateTask(taskId, { notes });
+  const el = document.getElementById('note-' + noteId);
+  if (el) el.remove();
+}
+
+async function quickProgress(taskId, inc) {
+  const task = S.tasks.find(t => t.id === taskId);
+  const newProgress = Math.min(100, task.progress + inc);
+  await updateTask(taskId, { progress: newProgress });
+  if (newProgress >= 100) {
+    await completeTask({ ...task, progress: 100 });
+    closeModal();
+  } else {
+    toast(`Прогресс: ${newProgress}%`, 'info');
+    // Update progress bar in modal
+    const pbar = document.querySelector('.modal-body .progress-bar-fill');
+    const plabel = document.querySelector('.modal-body span[style*="accent-light"]');
+    if (pbar) pbar.style.width = newProgress + '%';
+    if (plabel) plabel.textContent = newProgress + '%';
+  }
+}
+
+// ==================== TASK FORM ====================
+async function openTaskForm(editId = null) {
+  const editing = editId ? S.tasks.find(t => t.id === editId) : null;
+  const cats = S.categories;
+  let currentTags = editing ? [...editing.tags] : [];
+  let currentParents = editing ? [...(editing.parent_ids || [])] : [];
+  let currentNotes = editing ? [...editing.notes] : [];
+
+  const catsHtml = `<option value="">Без категории</option>` +
+    cats.map(c => `<option value="${c.id}" ${editing && editing.category_id === c.id ? 'selected' : ''}>${c.icon} ${esc(c.name)}</option>`).join('');
+
+  const otherTasks = S.tasks.filter(t => t.id !== editId);
+
+  showModal(editing ? 'Редактировать задачу' : 'Новая задача', `
+    <div class="form-group">
+      <label class="form-label">Название *</label>
+      <input class="form-input" id="f-title" value="${editing ? esc(editing.title) : ''}" placeholder="Название задачи">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Описание</label>
+      <textarea class="form-textarea" id="f-desc" placeholder="Описание задачи…">${editing ? esc(editing.description || '') : ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Категория</label>
+      <div style="display:flex;gap:8px">
+        <select class="form-select" id="f-category" style="flex:1">${catsHtml}</select>
+        <button class="btn btn-ghost btn-sm" onclick="quickCreateCategory()">+ Новая</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Теги</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap" id="f-tags-list">
+        ${currentTags.map(t => `<span class="chip">#${t} <span class="chip-remove" onclick="removeTag(this,'${t}')">×</span></span>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="f-tag-input" placeholder="Новый тег…" style="flex:1" onkeydown="if(event.key==='Enter')addTagFromInput()">
+        <button class="btn btn-ghost btn-sm" onclick="addTagFromInput()">+</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Приоритет</label>
+      <div class="priority-group">
+        <button class="priority-btn${!editing || editing.priority==='low' ? editing && editing.priority!=='low' ? '' : ' active' : ''}" data-val="low" onclick="setPriority(this)">🟢 Низкий</button>
+        <button class="priority-btn${editing && editing.priority==='medium' ? ' active' : !editing ? ' active' : ''}" data-val="medium" onclick="setPriority(this)">🟡 Средний</button>
+        <button class="priority-btn${editing && editing.priority==='high' ? ' active' : ''}" data-val="high" onclick="setPriority(this)">🔴 Высокий</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Сложность (влияет на очки)</label>
+      <div class="weight-group">
+        <button class="weight-btn${editing && editing.weight==='easy' ? ' active' : !editing ? ' active' : ''}" data-val="easy" onclick="setWeight(this)">Лёгкая</button>
+        <button class="weight-btn${editing && editing.weight==='medium' ? ' active' : ''}" data-val="medium" onclick="setWeight(this)">Средняя</button>
+        <button class="weight-btn${editing && editing.weight==='hard' ? ' active' : ''}" data-val="hard" onclick="setWeight(this)">Тяжёлая</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Дедлайн</label>
+      <input class="form-input" id="f-deadline" type="datetime-local" value="${editing && editing.deadline ? new Date(editing.deadline).toISOString().slice(0,16) : ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Начальный прогресс: <span id="f-prog-val">${editing ? editing.progress : 0}%</span></label>
+      <input type="range" class="range-input" id="f-progress" min="0" max="100" value="${editing ? editing.progress : 0}" oninput="document.getElementById('f-prog-val').textContent=this.value+'%'">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Целевое время (мин)</label>
+      <input class="form-input" id="f-target-time" type="number" min="1" placeholder="Напр. 90" value="${editing && editing.target_time ? editing.target_time : ''}">
+    </div>
+    ${otherTasks.length ? `
+    <div class="form-group">
+      <label class="form-label">Зависимости (выполнить сначала)</label>
+      <div id="f-parents-list" style="margin-bottom:8px">
+        ${currentParents.map(pid => {
+          const pt = otherTasks.find(t => t.id === pid);
+          return pt ? `<span class="dep-tag" data-id="${pid}">${esc(pt.title)} <span class="dep-tag-remove" onclick="removeParent(this,${pid})">×</span></span>` : '';
+        }).join('')}
+      </div>
+      <select class="form-select" id="f-parent-select" onchange="addParent(this)">
+        <option value="">Добавить зависимость…</option>
+        ${otherTasks.filter(t => !currentParents.includes(t.id)).map(t => `<option value="${t.id}">${esc(t.title)}</option>`).join('')}
+      </select>
+    </div>` : ''}
+    <div class="form-group">
+      <label class="form-label">Повторение</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <button class="toggle${editing && editing.is_recurring ? ' on' : ''}" id="f-recurring-toggle" onclick="this.classList.toggle('on');document.getElementById('f-recurrence-opts').style.display=this.classList.contains('on')?'block':'none'"></button>
+        <span style="font-size:14px">Повторяющаяся задача</span>
+      </div>
+      <div id="f-recurrence-opts" style="display:${editing && editing.is_recurring ? 'block' : 'none'}">
+        <select class="form-select" id="f-recur-type" style="margin-bottom:8px">
+          <option value="daily" ${editing && editing.recurrence?.type==='daily' ? 'selected' : ''}>Ежедневно</option>
+          <option value="weekly" ${editing && editing.recurrence?.type==='weekly' ? 'selected' : ''}>Еженедельно</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Напоминания</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <button class="toggle${editing && editing.reminder?.enabled ? ' on' : ''}" id="f-reminder-toggle" onclick="this.classList.toggle('on');document.getElementById('f-reminder-opts').style.display=this.classList.contains('on')?'block':'none'"></button>
+        <span style="font-size:14px">Включить напоминания</span>
+      </div>
+      <div id="f-reminder-opts" style="display:${editing && editing.reminder?.enabled ? 'block' : 'none'}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <input class="form-input" id="f-reminder-mins" type="number" min="5" placeholder="Мин. до дедлайна" value="${editing && editing.reminder?.minutes_before || 30}" style="flex:1">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="toggle${editing && editing.reminder?.aggressive ? ' on' : ''}" id="f-aggressive-toggle"></button>
+          <span style="font-size:13px;color:var(--text-secondary)">Агрессивный режим (повторять каждые N мин)</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveTaskForm(${editId || 'null'})">
+        ${editing ? 'Сохранить' : 'Создать'}
+      </button>
+    </div>
+  `);
+
+  // Store refs for closure
+  window._formCurrentTags = currentTags;
+  window._formCurrentParents = currentParents;
+}
+
+function setPriority(el) {
+  document.querySelectorAll('.priority-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+function setWeight(el) {
+  document.querySelectorAll('.weight-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+function addTagFromInput() {
+  const input = document.getElementById('f-tag-input');
+  const val = input.value.trim().replace(/^#/, '');
+  if (!val || window._formCurrentTags.includes(val)) { input.value = ''; return; }
+  window._formCurrentTags.push(val);
+  const list = document.getElementById('f-tags-list');
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  chip.innerHTML = `#${esc(val)} <span class="chip-remove" onclick="removeTag(this,'${val}')">×</span>`;
+  list.appendChild(chip);
+  input.value = '';
+}
+function removeTag(el, tag) {
+  window._formCurrentTags = window._formCurrentTags.filter(t => t !== tag);
+  el.closest('.chip').remove();
+}
+function addParent(sel) {
+  const id = +sel.value;
+  if (!id) return;
+  if (window._formCurrentParents.includes(id)) return;
+  window._formCurrentParents.push(id);
+  const task = S.tasks.find(t => t.id === id);
+  const list = document.getElementById('f-parents-list');
+  const span = document.createElement('span');
+  span.className = 'dep-tag';
+  span.dataset.id = id;
+  span.innerHTML = `${esc(task.title)} <span class="dep-tag-remove" onclick="removeParent(this,${id})">×</span>`;
+  list.appendChild(span);
+  sel.value = '';
+}
+function removeParent(el, id) {
+  window._formCurrentParents = window._formCurrentParents.filter(p => p !== id);
+  el.closest('.dep-tag').remove();
+}
+
+async function saveTaskForm(editId) {
+  const title = document.getElementById('f-title')?.value.trim();
+  if (!title) { toast('Введите название задачи', 'error'); return; }
+  const desc = document.getElementById('f-desc')?.value.trim();
+  const catId = document.getElementById('f-category')?.value;
+  const priority = document.querySelector('.priority-btn.active')?.dataset.val || 'medium';
+  const weight = document.querySelector('.weight-btn.active')?.dataset.val || 'medium';
+  const deadlineInput = document.getElementById('f-deadline')?.value;
+  const deadline = deadlineInput ? new Date(deadlineInput).getTime() : null;
+  const progress = +document.getElementById('f-progress')?.value || 0;
+  const targetTime = +document.getElementById('f-target-time')?.value || null;
+  const isRecurring = document.getElementById('f-recurring-toggle')?.classList.contains('on');
+  const recurType = document.getElementById('f-recur-type')?.value || 'daily';
+  const reminderEnabled = document.getElementById('f-reminder-toggle')?.classList.contains('on');
+  const reminderMins = +document.getElementById('f-reminder-mins')?.value || 30;
+  const aggressive = document.getElementById('f-aggressive-toggle')?.classList.contains('on');
+
+  // Cycle check
+  if (editId && window._formCurrentParents.length) {
+    if (hasCycle(editId, window._formCurrentParents)) {
+      toast('Обнаружена циклическая зависимость!', 'error');
+      return;
+    }
+  }
+
+  const data = {
+    title, description: desc,
+    category_id: catId ? +catId : null,
+    tags: window._formCurrentTags || [],
+    priority, weight,
+    deadline, progress,
+    target_time: targetTime,
+    parent_ids: window._formCurrentParents || [],
+    is_recurring: isRecurring,
+    recurrence: isRecurring ? { type: recurType, interval: 1 } : null,
+    reminder: { enabled: reminderEnabled, minutes_before: reminderMins, aggressive, interval_minutes: S.settings.notifInterval }
+  };
+
+  closeModal();
+  if (editId) {
+    await updateTask(editId, data);
+    toast('Задача обновлена', 'success');
+  } else {
+    await createTask(data);
+  }
+}
+
+function hasCycle(taskId, parents) {
+  const visited = new Set();
+  function dfs(id) {
+    if (id === taskId) return true;
+    if (visited.has(id)) return false;
+    visited.add(id);
+    const t = S.tasks.find(t => t.id === id);
+    if (!t || !t.parent_ids) return false;
+    return t.parent_ids.some(pid => dfs(pid));
+  }
+  return parents.some(pid => dfs(pid));
+}
+
+// ==================== CATEGORIES ====================
+async function quickCreateCategory() {
+  const name = prompt('Название категории:');
+  if (!name) return;
+  const icons = ['📋','💼','🏠','❤️','💡','🎯','📚','🎵','🏃','💰','🌱','⚡'];
+  const icon = icons[Math.floor(Math.random() * icons.length)];
+  const colors = ['#7c3aed','#2563eb','#db2777','#059669','#ea580c','#dc2626','#0891b2','#d97706'];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const cat = { name: name.trim(), icon, color, created_at: Date.now() };
+  const id = await db.categories.add(cat);
+  cat.id = id;
+  S.categories.push(cat);
+  // Update select
+  const sel = document.getElementById('f-category');
+  if (sel) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.text = `${icon} ${cat.name}`;
+    opt.selected = true;
+    sel.add(opt);
+  }
+  toast('Категория создана', 'success');
+}
+
+function renderCategoriesList() {
+  const container = document.getElementById('categories-list');
+  if (!container) return;
+  if (!S.categories.length) {
+    container.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:12px">Нет категорий</div>';
+    return;
+  }
+  container.innerHTML = S.categories.map(c => `
+    <div class="settings-row" style="margin-bottom:8px">
+      <div class="settings-row-left" style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:8px;background:${c.color}33;display:flex;align-items:center;justify-content:center;font-size:16px">${c.icon}</div>
+        <span style="font-size:14px">${esc(c.name)}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="editCategory(${c.id})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteCategory(${c.id})">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function editCategory(id) {
+  const cat = S.categories.find(c => c.id === id);
+  if (!cat) return;
+  const icons = ['📋','💼','🏠','❤️','💡','🎯','📚','🎵','🏃','💰','🌱','⚡','🔬','🎮','✈️','🍕'];
+  showModal('Редактировать категорию', `
+    <div class="form-group">
+      <label class="form-label">Название</label>
+      <input class="form-input" id="cat-name" value="${esc(cat.name)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Иконка</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        ${icons.map(i => `<button onclick="selectCatIcon(this,'${i}')" style="width:40px;height:40px;font-size:20px;background:${i===cat.icon?'var(--surface-hover)':'var(--surface)'};border:1px solid ${i===cat.icon?'var(--accent-light)':'var(--border)'};border-radius:10px;cursor:pointer">${i}</button>`).join('')}
+      </div>
+      <input class="form-input" id="cat-icon-custom" value="${cat.icon}" placeholder="Или введите эмодзи" style="width:100px">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Цвет</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        ${['#7c3aed','#2563eb','#db2777','#059669','#ea580c','#dc2626','#0891b2','#d97706','#7c3aed','#64748b'].map(col => `<button onclick="selectCatColor(this,'${col}')" style="width:36px;height:36px;border-radius:10px;background:${col};border:2px solid ${col===cat.color?'#fff':'transparent'};cursor:pointer"></button>`).join('')}
+      </div>
+      <input class="form-input" id="cat-color" type="color" value="${cat.color}" style="width:60px;padding:4px">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveCategoryEdit(${id})">Сохранить</button>
+    </div>
+  `);
+}
+
+function selectCatIcon(btn, icon) {
+  document.querySelectorAll('.modal-body button[onclick*="selectCatIcon"]').forEach(b => { b.style.background = 'var(--surface)'; b.style.borderColor = 'var(--border)'; });
+  btn.style.background = 'var(--surface-hover)';
+  btn.style.borderColor = 'var(--accent-light)';
+  document.getElementById('cat-icon-custom').value = icon;
+}
+function selectCatColor(btn, color) {
+  document.querySelectorAll('.modal-body button[onclick*="selectCatColor"]').forEach(b => b.style.borderColor = 'transparent');
+  btn.style.borderColor = '#fff';
+  document.getElementById('cat-color').value = color;
+}
+
+async function saveCategoryEdit(id) {
+  const name = document.getElementById('cat-name').value.trim();
+  const icon = document.getElementById('cat-icon-custom').value || '📋';
+  const color = document.getElementById('cat-color').value;
+  await db.categories.update(id, { name, icon, color });
+  const idx = S.categories.findIndex(c => c.id === id);
+  if (idx > -1) Object.assign(S.categories[idx], { name, icon, color });
+  closeModal();
+  renderCategoriesList();
+  renderHome();
+  toast('Категория обновлена', 'success');
+}
+
+async function confirmDeleteCategory(id) {
+  confirm2('Удалить категорию?', 'Задачи этой категории станут без категории.', async () => {
+    await db.categories.delete(id);
+    S.categories = S.categories.filter(c => c.id !== id);
+    S.tasks.filter(t => t.category_id === id).forEach(t => t.category_id = null);
+    await db.tasks.where('category_id').equals(id).modify({ category_id: null });
+    renderCategoriesList();
+    renderHome();
+    toast('Категория удалена');
+  });
+}
+
+// ==================== TIMER ====================
+function setupTimer() {
+  document.getElementById('timer-stop-btn').addEventListener('click', stopTimer);
+  document.getElementById('timer-pause-btn').addEventListener('click', pauseTimer);
+}
+
+function startTimer(taskId) {
+  if (S.activeTimer && S.activeTimer.taskId !== taskId) {
+    confirm2('Активный таймер', 'Остановить текущий таймер и начать новый?', () => {
+      stopTimer();
+      _doStartTimer(taskId);
+    });
+    return;
+  }
+  if (S.activeTimer && S.activeTimer.taskId === taskId) { toast('Таймер уже запущен', 'info'); return; }
+  _doStartTimer(taskId);
+  closeModal();
+}
+
+function _doStartTimer(taskId) {
+  const task = S.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  S.activeTimer = { taskId, start: Date.now(), elapsed: 0, paused: false, sessionStart: Date.now() };
+  document.getElementById('timer-task-name').textContent = task.title;
+  document.getElementById('timer-pill').classList.add('active');
+  S.activeTimer.interval = setInterval(updateTimerDisplay, 500);
+  toast('⏱ Таймер запущен', 'info');
+
+  // Schedule target time notification
+  if (task.target_time && S.settings.notifEnabled) {
+    const delay = task.target_time * 60 * 1000;
+    scheduleNotif('timer-target-' + taskId, delay, '🎉 Красавчик!', `Ты потратил ${task.target_time} мин на "${task.title}"`);
+  }
+}
+
+function updateTimerDisplay() {
+  if (!S.activeTimer || S.activeTimer.paused) return;
+  const elapsed = Date.now() - S.activeTimer.start + S.activeTimer.elapsed;
+  document.getElementById('timer-display').textContent = formatTime(Math.floor(elapsed / 1000), true);
+}
+
+function pauseTimer() {
+  if (!S.activeTimer) return;
+  if (S.activeTimer.paused) {
+    S.activeTimer.start = Date.now();
+    S.activeTimer.paused = false;
+    document.getElementById('timer-pause-btn').textContent = '⏸';
+  } else {
+    S.activeTimer.elapsed += Date.now() - S.activeTimer.start;
+    S.activeTimer.paused = true;
+    document.getElementById('timer-pause-btn').textContent = '▶️';
+  }
+}
+
+async function stopTimer() {
+  if (!S.activeTimer) return;
+  clearInterval(S.activeTimer.interval);
+  const duration = Math.floor((S.activeTimer.elapsed + (S.activeTimer.paused ? 0 : Date.now() - S.activeTimer.start)) / 1000);
+  const session = { start: S.activeTimer.sessionStart, end: Date.now(), duration };
+  const task = S.tasks.find(t => t.id === S.activeTimer.taskId);
+  if (task) {
+    const sessions = [...(task.timer_sessions || []), session];
+    await updateTask(task.id, { time_spent: (task.time_spent || 0) + duration, timer_sessions: sessions });
+    toast(`⏱ Сохранено: ${formatTime(duration)}`, 'success');
+  }
+  S.activeTimer = null;
+  document.getElementById('timer-pill').classList.remove('active');
+  cancelNotif('timer-target-' + (task?.id));
+}
+
+// ==================== TREE VIEW ====================
+function renderTree() {
+  const svg = document.getElementById('tree-svg');
+  const filterSel = document.getElementById('tree-filter-sel');
+
+  // Populate filter
+  filterSel.innerHTML = '<option value="">Все задачи</option>' +
+    S.tasks.map(t => `<option value="${t.id}">${esc(t.title)}</option>`).join('');
+
+  const selectedId = filterSel.value ? +filterSel.value : null;
+  let tasks = selectedId ? getSubtree(selectedId) : S.tasks.filter(t => t.status !== 'dropped');
+
+  if (!tasks.length) { svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="14">Нет задач для отображения</text>'; return; }
+
+  // Build adjacency
+  const W = 180, H = 80, gapX = 220, gapY = 120;
+  const positions = {};
+  const levels = {};
+
+  // Topological sort
+  const visited = new Set();
+  const order = [];
+  function topo(id) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    (t.parent_ids || []).forEach(pid => topo(pid));
+    order.push(id);
+  }
+  tasks.forEach(t => topo(t.id));
+
+  // Assign levels
+  order.forEach(id => {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    const parentLevels = (t.parent_ids || []).filter(pid => tasks.find(t => t.id === pid)).map(pid => levels[pid] ?? 0);
+    levels[id] = parentLevels.length ? Math.max(...parentLevels) + 1 : 0;
+  });
+
+  // Group by level
+  const byLevel = {};
+  tasks.forEach(t => {
+    const lv = levels[t.id] ?? 0;
+    if (!byLevel[lv]) byLevel[lv] = [];
+    byLevel[lv].push(t);
+  });
+
+  const maxLevel = Math.max(...Object.keys(byLevel).map(Number));
+  const svgWidth = Math.max(400, (maxLevel + 1) * gapX + 60);
+  const svgHeight = Math.max(300, Math.max(...Object.values(byLevel).map(a => a.length)) * gapY + 60);
+
+  Object.entries(byLevel).forEach(([lv, ts]) => {
+    const x = +lv * gapX + 30;
+    ts.forEach((t, i) => {
+      const totalH = ts.length * gapY;
+      const y = (svgHeight - totalH) / 2 + i * gapY;
+      positions[t.id] = { x, y };
+    });
+  });
+
+  // Colors
+  const statusColor = { active: 'var(--accent)', done: 'var(--success)', frozen: 'var(--frozen)', dropped: 'var(--danger)' };
+
+  let edgesSVG = '';
+  tasks.forEach(t => {
+    (t.parent_ids || []).forEach(pid => {
+      const from = positions[pid], to = positions[t.id];
+      if (!from || !to) return;
+      const x1 = from.x + W, y1 = from.y + H / 2;
+      const x2 = to.x, y2 = to.y + H / 2;
+      const mx = (x1 + x2) / 2;
+      const locked = tasks.find(p => p.id === pid && p.progress < 100);
+      edgesSVG += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${locked ? '#4b5563' : 'var(--accent-light)'}" stroke-width="2" stroke-dasharray="${locked ? '6,4' : 'none'}" opacity="0.7"/>`;
+    });
+  });
+
+  let nodesSVG = '';
+  tasks.forEach(t => {
+    const p = positions[t.id];
+    if (!p) return;
+    const locked = isTaskLocked(t);
+    const color = locked ? '#6b7280' : statusColor[t.status] || 'var(--accent)';
+    const cat = S.categories.find(c => c.id === t.category_id);
+    const icon = cat ? cat.icon : '📋';
+    const titleShort = t.title.length > 20 ? t.title.slice(0, 19) + '…' : t.title;
+    nodesSVG += `
+      <g onclick="openTaskDetail(${t.id})" style="cursor:pointer" class="tree-node">
+        <rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="12" fill="rgba(13,13,20,0.9)" stroke="${color}" stroke-width="1.5"/>
+        <rect x="${p.x}" y="${p.y}" width="4" height="${H}" rx="2" fill="${color}"/>
+        <text x="${p.x+20}" y="${p.y+22}" font-size="18" fill="white">${icon}</text>
+        <text x="${p.x+44}" y="${p.y+22}" font-size="12" fill="${color}" font-weight="600">${titleShort}</text>
+        <rect x="${p.x+12}" y="${p.y+38}" width="${(W-24)*t.progress/100}" height="5" rx="2.5" fill="${t.progress>=100?'var(--success)':color}"/>
+        <rect x="${p.x+12}" y="${p.y+38}" width="${W-24}" height="5" rx="2.5" fill="rgba(255,255,255,0.08)"/>
+        <rect x="${p.x+12}" y="${p.y+38}" width="${(W-24)*t.progress/100}" height="5" rx="2.5" fill="${t.progress>=100?'var(--success)':color}"/>
+        <text x="${p.x+W-12}" y="${p.y+35}" font-size="11" fill="${color}" text-anchor="end">${t.progress}%</text>
+        <text x="${p.x+12}" y="${p.y+62}" font-size="11" fill="#9ca3af">${locked?'🔒 ':''} ${t.priority} · ${t.status}</text>
+      </g>`;
+  });
+
+  svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+  svg.setAttribute('width', svgWidth);
+  svg.setAttribute('height', svgHeight);
+  svg.innerHTML = edgesSVG + nodesSVG;
+}
+
+function getSubtree(rootId) {
+  const result = new Set();
+  function collect(id) {
+    if (result.has(id)) return;
+    result.add(id);
+    S.tasks.filter(t => (t.parent_ids || []).includes(id)).forEach(t => collect(t.id));
+  }
+  // Also add parents
+  function collectUp(id) {
+    if (result.has(id)) return;
+    result.add(id);
+    const t = S.tasks.find(t => t.id === id);
+    if (t) (t.parent_ids || []).forEach(pid => collectUp(pid));
+  }
+  collect(rootId);
+  collectUp(rootId);
+  return S.tasks.filter(t => result.has(t.id));
+}
+
+document.getElementById('tree-filter-sel').addEventListener('change', renderTree);
+
+// ==================== STATS ====================
+async function renderStats() {
+  await loadData();
+  const history = await db.history.toArray();
+
+  // Summary stats
+  const done = S.tasks.filter(t => t.status === 'done').length;
+  const active = S.tasks.filter(t => t.status === 'active').length;
+  const dropped = S.tasks.filter(t => t.status === 'dropped').length;
+  const frozen = S.tasks.filter(t => t.status === 'frozen').length;
+  const totalTime = S.tasks.reduce((a, t) => a + (t.time_spent || 0), 0);
+  const totalPoints = history.reduce((a, h) => a + (h.points || 0), 0);
+  const streak = getCurrentStreak(history);
+
+  document.getElementById('stats-summary').innerHTML = `
+    <div class="card stat-card"><div class="stat-num">${done}</div><div class="stat-label">Выполнено</div></div>
+    <div class="card stat-card"><div class="stat-num">${active}</div><div class="stat-label">Активных</div></div>
+    <div class="card stat-card"><div class="stat-num">${formatTime(totalTime)}</div><div class="stat-label">Время</div></div>
+    <div class="card stat-card"><div class="stat-num" style="color:var(--warning)">${totalPoints}</div><div class="stat-label">Очков</div></div>
+    <div class="card stat-card"><div class="stat-num" style="color:var(--danger)">${dropped}</div><div class="stat-label">Брошено</div></div>
+    <div class="card stat-card"><div class="stat-num">🔥 ${streak}</div><div class="stat-label">Streak</div></div>
+  `;
+
+  renderHeatmap(history);
+  renderCharts(history);
+}
+
+function renderHeatmap(history) {
+  const container = document.getElementById('heatmap');
+  const weeks = 16;
+  const cells = weeks * 7;
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+
+  const byDate = {};
+  history.filter(h => h.type === 'done').forEach(h => {
+    byDate[h.date] = (byDate[h.date] || 0) + 1;
+  });
+
+  let html = '';
+  for (let i = cells - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const count = byDate[key] || 0;
+    const v = count === 0 ? 0 : count <= 1 ? 1 : count <= 3 ? 2 : count <= 5 ? 3 : 4;
+    html += `<div class="heatmap-cell" data-v="${v}" data-date="${key}" data-count="${count}" title="${key}: ${count} задач" onclick="showHeatmapDay('${key}')"></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function showHeatmapDay(date) {
+  const dayTasks = S.tasks.filter(t => {
+    if (!t.updated_at) return false;
+    return new Date(t.updated_at).toISOString().slice(0,10) === date && t.status === 'done';
+  });
+  const tip = document.getElementById('heatmap-tip');
+  if (dayTasks.length) {
+    showModal(date, `<div>${dayTasks.map(t => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">${esc(t.title)}</div>`).join('')}</div>`);
+  } else {
+    tip.textContent = `${date}: нет выполненных задач`;
+  }
+}
+
+function renderCharts(history) {
+  // Points over 30 days
+  const days30 = [];
+  const today = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days30.push(d.toISOString().slice(0, 10));
+  }
+  const pointsByDay = {};
+  history.forEach(h => { pointsByDay[h.date] = (pointsByDay[h.date] || 0) + (h.points || 0); });
+
+  const labels30 = days30.map(d => d.slice(5));
+  const data30 = days30.map(d => Math.max(0, pointsByDay[d] || 0));
+
+  drawLineChart('chart-points', labels30, data30, 'Очки');
+
+  // Time by category
+  const catTime = {};
+  S.tasks.forEach(t => {
+    if (!t.time_spent) return;
+    const cat = S.categories.find(c => c.id === t.category_id);
+    const key = cat ? cat.name : 'Другое';
+    catTime[key] = (catTime[key] || 0) + t.time_spent;
+  });
+  const catLabels = Object.keys(catTime);
+  const catData = Object.values(catTime).map(v => Math.round(v / 60));
+  if (catLabels.length) drawBarChart('chart-categories', catLabels, catData, 'Минуты');
+
+  // Status pie
+  const statuses = { done: 0, dropped: 0, frozen: 0, active: 0 };
+  S.tasks.forEach(t => { if (statuses[t.status] !== undefined) statuses[t.status]++; });
+  drawPieChart('chart-status', Object.keys(statuses), Object.values(statuses));
+}
+
+function drawLineChart(canvasId, labels, data, yLabel) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 300;
+  canvas.height = canvas.offsetHeight || 180;
+  const w = canvas.width, h = canvas.height;
+  const pad = { top: 15, right: 15, bottom: 30, left: 40 };
+  const pw = w - pad.left - pad.right, ph = h - pad.top - pad.bottom;
+  const max = Math.max(...data, 1);
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ph * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + pw, y); ctx.stroke();
+    ctx.fillStyle = '#6b7280'; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(max * (1 - i / 4)), pad.left - 4, y + 3);
+  }
+
+  // Line
+  const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ph);
+  gradient.addColorStop(0, hexToRgba(S.settings.accent, 0.6));
+  gradient.addColorStop(1, hexToRgba(S.settings.accent, 0.02));
+
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = pad.left + (i / (data.length - 1)) * pw;
+    const y = pad.top + ph - (v / max) * ph;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = S.settings.accent;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(pad.left + pw, pad.top + ph);
+  ctx.lineTo(pad.left, pad.top + ph);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // X labels (every 5)
+  ctx.fillStyle = '#6b7280'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+  labels.forEach((l, i) => {
+    if (i % 5 !== 0) return;
+    const x = pad.left + (i / (labels.length - 1)) * pw;
+    ctx.fillText(l, x, h - 4);
+  });
+}
+
+function drawBarChart(canvasId, labels, data, yLabel) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 300;
+  canvas.height = canvas.offsetHeight || 180;
+  const w = canvas.width, h = canvas.height;
+  const pad = { top: 15, right: 15, bottom: 30, left: 40 };
+  const pw = w - pad.left - pad.right, ph = h - pad.top - pad.bottom;
+  const max = Math.max(...data, 1);
+  const barW = pw / data.length * 0.6;
+
+  ctx.clearRect(0, 0, w, h);
+
+  data.forEach((v, i) => {
+    const x = pad.left + (i + 0.5) * pw / data.length - barW / 2;
+    const barH = (v / max) * ph;
+    const y = pad.top + ph - barH;
+    ctx.fillStyle = hexToRgba(S.settings.accent, 0.7);
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, barW, barH, 4) : ctx.rect(x, y, barW, barH);
+    ctx.fill();
+    ctx.fillStyle = '#9ca3af'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+    const label = labels[i].length > 8 ? labels[i].slice(0, 7) + '…' : labels[i];
+    ctx.fillText(label, x + barW / 2, h - 4);
+  });
+}
+
+function drawPieChart(canvasId, labels, data, colors) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 300;
+  canvas.height = canvas.offsetHeight || 200;
+  const w = canvas.width, h = canvas.height;
+  const total = data.reduce((a, v) => a + v, 0);
+  if (!total) return;
+
+  const palettes = [S.settings.accent, '#10b981', '#3b82f6', '#ef4444', '#f59e0b'];
+  const cx = w * 0.35, cy = h / 2, r = Math.min(cx, cy) - 10;
+
+  ctx.clearRect(0, 0, w, h);
+  let startAngle = -Math.PI / 2;
+
+  data.forEach((v, i) => {
+    if (!v) return;
+    const angle = (v / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, startAngle + angle);
+    ctx.closePath();
+    ctx.fillStyle = palettes[i % palettes.length];
+    ctx.fill();
+    startAngle += angle;
+  });
+
+  // Legend
+  labels.forEach((l, i) => {
+    if (!data[i]) return;
+    const lx = w * 0.7, ly = 30 + i * 30;
+    ctx.fillStyle = palettes[i % palettes.length];
+    ctx.beginPath(); ctx.arc(lx - 8, ly, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f1f0f7'; ctx.font = '12px system-ui'; ctx.textAlign = 'left';
+    ctx.fillText(`${l}: ${data[i]}`, lx, ly + 4);
+  });
+}
+
+// ==================== NOTIFICATIONS ====================
+function scheduleNotif(id, delay, title, body) {
+  if (!S.settings.notifEnabled) return;
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type: 'SCHEDULE_NOTIFICATION', id, delay, title, body, tag: id
+    });
+  } else {
+    const tid = setTimeout(() => {
+      if (Notification.permission === 'granted') new Notification(title, { body, icon: '/icon.png' });
+    }, delay);
+    window._localNotifTimers = window._localNotifTimers || {};
+    window._localNotifTimers[id] = tid;
+  }
+}
+
+function cancelNotif(id) {
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'CANCEL_NOTIFICATION', id });
+  }
+  if (window._localNotifTimers && window._localNotifTimers[id]) {
+    clearTimeout(window._localNotifTimers[id]);
+    delete window._localNotifTimers[id];
+  }
+}
+
+function scheduleTaskReminder(task) {
+  if (!task.reminder?.enabled || !task.deadline || !S.settings.notifEnabled) return;
+  const delay = task.deadline - Date.now() - (task.reminder.minutes_before || 30) * 60000;
+  if (delay > 0) {
+    scheduleNotif('reminder-' + task.id, delay, '⏰ Напоминание', `Дедлайн задачи "${task.title}" через ${task.reminder.minutes_before} мин`);
+  }
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) { toast('Уведомления не поддерживаются', 'error'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    await saveSetting('notifEnabled', true);
+    document.getElementById('toggle-notif').classList.add('on');
+    toast('🔔 Уведомления включены!', 'success');
+  } else {
+    toast('Разрешение отклонено', 'error');
+  }
+}
+
+// ==================== STREAK ====================
+function getCurrentStreak(history) {
+  const days = [...new Set(history.filter(h => h.type === 'done').map(h => h.date))].sort().reverse();
+  if (!days.length) return 0;
+  let streak = 0, cur = new Date();
+  cur.setHours(0, 0, 0, 0);
+  for (const d of days) {
+    const dd = new Date(d);
+    dd.setHours(0, 0, 0, 0);
+    const diff = Math.round((cur - dd) / 86400000);
+    if (diff === streak) streak++;
+    else break;
+  }
+  return streak;
+}
+
+async function updateStreak() {
+  const history = await db.history.toArray();
+  const streak = getCurrentStreak(history);
+  const chip = document.getElementById('streak-chip');
+  if (streak > 0) {
+    chip.style.display = '';
+    chip.textContent = `🔥 ${streak}`;
+  }
+  // Schedule streak warning
+  scheduleStreakWarning(streak);
+}
+
+function scheduleStreakWarning(streak) {
+  if (!S.settings.notifEnabled || !streak) return;
+  const [h, m] = (S.settings.streakWarnTime || '21:00').split(':').map(Number);
+  const now = new Date();
+  const target = new Date();
+  target.setHours(h, m, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+  scheduleNotif('streak-warn', target - now, '🔥 Streak под угрозой!', `Сегодня ещё нет выполненных задач. Не теряй серию в ${streak} дней!`);
+}
+
+function updateStreakChip() {
+  db.history.toArray().then(h => {
+    const streak = getCurrentStreak(h);
+    const chip = document.getElementById('streak-chip');
+    if (streak > 0) { chip.style.display = ''; chip.textContent = `🔥 ${streak}`; }
+  });
+}
+
+// ==================== CONTEXT MENU ====================
+function setupContextMenu() {
+  document.getElementById('ctx-edit').addEventListener('click', () => { if (S.ctxTaskId) { openTaskForm(S.ctxTaskId); closeCtx(); } });
+  document.getElementById('ctx-timer').addEventListener('click', () => { if (S.ctxTaskId) { startTimer(S.ctxTaskId); closeCtx(); } });
+  document.getElementById('ctx-progress').addEventListener('click', () => { if (S.ctxTaskId) { openProgressModal(S.ctxTaskId); closeCtx(); } });
+  document.getElementById('ctx-freeze').addEventListener('click', () => { if (S.ctxTaskId) { const t = S.tasks.find(t=>t.id===S.ctxTaskId); if(t) freezeTask(t); closeCtx(); } });
+  document.getElementById('ctx-drop').addEventListener('click', () => { if (S.ctxTaskId) { confirmDrop(S.ctxTaskId); closeCtx(); } });
+  document.getElementById('ctx-delete').addEventListener('click', () => { if (S.ctxTaskId) { confirmDelete(S.ctxTaskId); closeCtx(); } });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#ctx-menu')) closeCtx(); });
+}
+
+function openContextMenu(taskId, el) {
+  S.ctxTaskId = taskId;
+  const menu = document.getElementById('ctx-menu');
+  const rect = el.getBoundingClientRect();
+  const appRect = document.getElementById('app').getBoundingClientRect();
+  menu.classList.add('active');
+  const menuH = 250;
+  let top = rect.bottom - appRect.top;
+  if (top + menuH > appRect.height) top = rect.top - appRect.top - menuH;
+  menu.style.top = top + 'px';
+  menu.style.left = Math.min(rect.left - appRect.left, appRect.width - 220) + 'px';
+  const task = S.tasks.find(t => t.id === taskId);
+  document.getElementById('ctx-freeze').querySelector('span, div') && (document.getElementById('ctx-freeze').lastChild.textContent = task?.status === 'frozen' ? ' Разморозить' : ' Заморозить');
+}
+
+function closeCtx() { document.getElementById('ctx-menu').classList.remove('active'); }
+
+function openProgressModal(taskId) {
+  const task = S.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  showModal('Прогресс: ' + task.title.slice(0, 30), `
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span>Текущий прогресс</span>
+        <span id="prog-display" style="color:var(--accent-light);font-weight:600">${task.progress}%</span>
+      </div>
+      <div class="progress-bar-wrap" style="height:8px;margin-bottom:16px">
+        <div class="progress-bar-fill" id="prog-bar" style="width:${task.progress}%"></div>
+      </div>
+      <input type="range" class="range-input" min="0" max="100" value="${task.progress}" id="prog-slider"
+        oninput="document.getElementById('prog-display').textContent=this.value+'%';document.getElementById('prog-bar').style.width=this.value+'%'">
+    </div>
+    <div class="prog-actions" style="margin-bottom:16px">
+      <button class="prog-btn" onclick="setSlider(10)">10%</button>
+      <button class="prog-btn" onclick="setSlider(25)">25%</button>
+      <button class="prog-btn" onclick="setSlider(50)">50%</button>
+      <button class="prog-btn" onclick="setSlider(75)">75%</button>
+      <button class="prog-btn" onclick="setSlider(100)">100%</button>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="saveProgress(${taskId})">Сохранить</button>
+  `);
+}
+
+function setSlider(v) {
+  const s = document.getElementById('prog-slider');
+  const d = document.getElementById('prog-display');
+  const b = document.getElementById('prog-bar');
+  if (s) s.value = v;
+  if (d) d.textContent = v + '%';
+  if (b) b.style.width = v + '%';
+}
+
+async function saveProgress(taskId) {
+  const val = +document.getElementById('prog-slider').value;
+  const task = S.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  if (val >= 100) {
+    await updateTask(taskId, { progress: 100 });
+    await completeTask({ ...task, progress: 100 });
+    closeModal();
+  } else {
+    await updateTask(taskId, { progress: val });
+    toast('Прогресс сохранён', 'success');
+    closeModal();
+  }
+}
+
+// ==================== SWIPE GESTURES ====================
+function setupSwipe() {}
+function setupSwipeGestures() {
+  document.querySelectorAll('.task-card-inner, .task-card').forEach(card => {
+    let startX = 0, currentX = 0, isDragging = false;
+    card.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      isDragging = true;
+    }, { passive: true });
+    card.addEventListener('touchmove', e => {
+      if (!isDragging) return;
+      currentX = e.touches[0].clientX - startX;
+    }, { passive: true });
+    card.addEventListener('touchend', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      const taskId = +card.dataset.id;
+      if (currentX < -80) {
+        confirmDrop(taskId);
+      } else if (currentX > 80) {
+        const task = S.tasks.find(t => t.id === taskId);
+        if (task) freezeTask(task);
+      }
+      currentX = 0;
+    });
+  });
+}
+
+// ==================== MODAL ====================
+function setupModal() {
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+  });
+}
+
+function showModal(title, body) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+
+// ==================== CONFIRM ====================
+let _confirmCb = null;
+function confirm2(title, msg, cb) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-msg').textContent = msg;
+  _confirmCb = cb;
+  document.getElementById('confirm-overlay').classList.add('active');
+}
+document.getElementById('confirm-ok').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').classList.remove('active');
+  if (_confirmCb) _confirmCb();
+  _confirmCb = null;
+});
+document.getElementById('confirm-cancel').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').classList.remove('active');
+  _confirmCb = null;
+});
+
+function confirmDrop(taskId) {
+  const task = S.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  confirm2('Бросить задачу?', `"${task.title}" будет помечена как брошенная. Это повлияет на рейтинг.`, () => dropTask(task));
+}
+function confirmDelete(taskId) {
+  const task = S.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  confirm2('Удалить задачу?', `"${task.title}" будет удалена навсегда.`, () => deleteTask(taskId));
+}
+
+// ==================== FAB ====================
+function setupFAB() {
+  document.getElementById('fab').addEventListener('click', () => openTaskForm());
+}
+
+// ==================== SETTINGS ====================
+function setupSettingsListeners() {
+  // Accent swatches
+  const swatchContainer = document.getElementById('accent-swatches');
+  ACCENT_PRESETS.forEach(color => {
+    const sw = document.createElement('button');
+    sw.className = 'swatch' + (color === S.settings.accent ? ' active' : '');
+    sw.style.background = color;
+    sw.addEventListener('click', async () => {
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+      await saveSetting('accent', color);
+      applySettings();
+    });
+    swatchContainer.appendChild(sw);
+  });
+  // Custom color
+  const customInput = document.createElement('input');
+  customInput.type = 'color';
+  customInput.value = S.settings.accent;
+  customInput.style.cssText = 'width:36px;height:36px;border-radius:10px;border:1px solid var(--border);cursor:pointer;background:none;padding:2px';
+  customInput.addEventListener('change', async () => {
+    await saveSetting('accent', customInput.value);
+    applySettings();
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  });
+  swatchContainer.appendChild(customInput);
+
+  // Blur
+  const blurSel = document.getElementById('blur-select');
+  blurSel.value = S.settings.blur;
+  blurSel.addEventListener('change', async () => {
+    await saveSetting('blur', +blurSel.value);
+    applySettings();
+  });
+
+  // Font size
+  const fsSel = document.getElementById('fontsize-select');
+  fsSel.value = S.settings.fontSize;
+  fsSel.addEventListener('change', async () => {
+    await saveSetting('fontSize', +fsSel.value);
+    applySettings();
+  });
+
+  // Toggles
+  document.querySelectorAll('.toggle[data-key]').forEach(toggle => {
+    const key = toggle.dataset.key;
+    if (S.settings[key]) toggle.classList.add('on');
+    toggle.addEventListener('click', async () => {
+      toggle.classList.toggle('on');
+      await saveSetting(key, toggle.classList.contains('on'));
+      if (key === 'compact' || key === 'focusMode') { applySettings(); renderHome(); }
+      if (key === 'showDone' || key === 'showFrozen' || key === 'groupByCat') renderHome();
+    });
+  });
+
+  // Notification inputs
+  const notifBefore = document.getElementById('notif-before');
+  notifBefore.value = S.settings.notifBefore;
+  notifBefore.addEventListener('change', () => saveSetting('notifBefore', +notifBefore.value));
+
+  const notifInterval = document.getElementById('notif-interval');
+  notifInterval.value = S.settings.notifInterval;
+  notifInterval.addEventListener('change', () => saveSetting('notifInterval', +notifInterval.value));
+
+  const streakWarn = document.getElementById('streak-warn-time');
+  streakWarn.value = S.settings.streakWarnTime;
+  streakWarn.addEventListener('change', () => saveSetting('streakWarnTime', streakWarn.value));
+
+  document.getElementById('btn-request-notif').addEventListener('click', requestNotifPermission);
+
+  // Pomodoro
+  ['pomo-work', 'pomo-short', 'pomo-long', 'pomo-count'].forEach(id => {
+    const el = document.getElementById(id);
+    const key = { 'pomo-work': 'pomoWork', 'pomo-short': 'pomoShort', 'pomo-long': 'pomoLong', 'pomo-count': 'pomoCount' }[id];
+    el.value = S.settings[key];
+    el.addEventListener('change', () => saveSetting(key, +el.value));
+  });
+
+  // Export / Import
+  document.getElementById('btn-export').addEventListener('click', exportData);
+  document.getElementById('btn-import').addEventListener('click', () => document.getElementById('import-file').click());
+  document.getElementById('import-file').addEventListener('change', importData);
+  document.getElementById('btn-clear-data').addEventListener('click', () => {
+    confirm2('Очистить все данные?', 'Все задачи, категории и история будут удалены безвозвратно.', clearAllData);
+  });
+
+  // Category button
+  document.getElementById('btn-add-category').addEventListener('click', () => {
+    showModal('Новая категория', `
+      <div class="form-group">
+        <label class="form-label">Название</label>
+        <input class="form-input" id="cat-name" placeholder="Название категории">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Иконка (эмодзи)</label>
+        <input class="form-input" id="cat-icon-custom" value="📋" style="font-size:20px;width:80px">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Цвет</label>
+        <input class="form-input" type="color" id="cat-color" value="#7c3aed" style="width:60px;padding:4px">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Отмена</button>
+        <button class="btn btn-primary" style="flex:1" onclick="createCategoryFromModal()">Создать</button>
+      </div>
+    `);
+  });
+
+  // Filter and sort chips
+  document.getElementById('filter-toggle-btn').addEventListener('click', () => {
+    const strip = document.getElementById('filter-strip');
+    strip.style.display = strip.style.display === 'none' ? 'flex' : 'none';
+    document.getElementById('filter-toggle-btn').classList.toggle('active', strip.style.display !== 'none');
+  });
+
+  document.getElementById('filter-strip').addEventListener('click', e => {
+    const chip = e.target.closest('.filter-chip');
+    if (!chip) return;
+    document.querySelectorAll('#filter-strip .filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    S.currentFilter = chip.dataset.filter;
+    renderHome();
+  });
+
+  document.getElementById('sort-strip').addEventListener('click', e => {
+    const chip = e.target.closest('.filter-chip');
+    if (!chip) return;
+    document.querySelectorAll('#sort-strip .filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    S.currentSort = chip.dataset.sort;
+    renderHome();
+  });
+
+  document.getElementById('search-input').addEventListener('input', e => {
+    S.searchQuery = e.target.value;
+    renderHome();
+  });
+}
+
+async function createCategoryFromModal() {
+  const name = document.getElementById('cat-name').value.trim();
+  const icon = document.getElementById('cat-icon-custom').value || '📋';
+  const color = document.getElementById('cat-color').value;
+  if (!name) { toast('Введите название', 'error'); return; }
+  const cat = { name, icon, color, created_at: Date.now() };
+  const id = await db.categories.add(cat);
+  cat.id = id;
+  S.categories.push(cat);
+  closeModal();
+  renderCategoriesList();
+  toast('Категория создана', 'success');
+}
+
+async function exportData() {
+  const data = {
+    tasks: await db.tasks.toArray(),
+    categories: await db.categories.toArray(),
+    settings: await db.settings.toArray(),
+    history: await db.history.toArray(),
+    exported_at: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `taskflow-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Данные экспортированы', 'success');
+}
+
+async function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  try {
+    const data = JSON.parse(text);
+    if (!data.tasks) { toast('Неверный формат файла', 'error'); return; }
+    confirm2('Импорт данных', 'Текущие данные будут заменены. Продолжить?', async () => {
+      await db.tasks.clear();
+      await db.categories.clear();
+      await db.settings.clear();
+      await db.history.clear();
+      if (data.tasks.length) await db.tasks.bulkAdd(data.tasks);
+      if (data.categories?.length) await db.categories.bulkAdd(data.categories);
+      if (data.settings?.length) await db.settings.bulkPut(data.settings);
+      if (data.history?.length) await db.history.bulkAdd(data.history);
+      await loadSettings();
+      await loadData();
+      applySettings();
+      renderHome();
+      renderCategoriesList();
+      toast('Данные импортированы', 'success');
+    });
+  } catch { toast('Ошибка чтения файла', 'error'); }
+  e.target.value = '';
+}
+
+async function clearAllData() {
+  await db.tasks.clear();
+  await db.history.clear();
+  S.tasks = [];
+  await loadSettings();
+  renderHome();
+  toast('Данные очищены');
+}
+
+// ==================== PWA / SERVICE WORKER ====================
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      console.log('SW registered');
+    }).catch(e => console.log('SW registration failed', e));
+  }
+}
+
+// ==================== HELPERS ====================
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = d - now;
+  if (Math.abs(diff) < 86400000) {
+    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function formatTime(seconds, asTimer = false) {
+  if (asTimer) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  if (seconds < 60) return `${seconds}с`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}м`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return m ? `${h}ч ${m}м` : `${h}ч`;
+}
+
+function hexToRgba(hex, a) {
+  if (!hex || !hex.startsWith('#')) return `rgba(124,58,237,${a})`;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function lightenHex(hex, amount) {
+  if (!hex || !hex.startsWith('#')) return '#a78bfa';
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+  r = Math.min(255, r + amount);
+  g = Math.min(255, g + amount);
+  b = Math.min(255, b + amount);
+  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+  el.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'toastOut .25s ease-in forwards';
+    setTimeout(() => el.remove(), 260);
+  }, 2800);
+}
+
+// ==================== HEATMAP MODE TOGGLE ====================
+document.querySelectorAll('[data-hmap]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    document.querySelectorAll('[data-hmap]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const history = await db.history.toArray();
+    if (btn.dataset.hmap === 'points') {
+      const container = document.getElementById('heatmap');
+      const weeks = 16, cells = weeks * 7;
+      const today = new Date(); today.setHours(23,59,59,999);
+      const byDate = {};
+      history.forEach(h => { if (h.points > 0) byDate[h.date] = (byDate[h.date] || 0) + h.points; });
+      let html = '';
+      for (let i = cells - 1; i >= 0; i--) {
+        const d = new Date(today); d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0,10);
+        const pts = byDate[key] || 0;
+        const v = pts === 0 ? 0 : pts <= 10 ? 1 : pts <= 30 ? 2 : pts <= 60 ? 3 : 4;
+        html += `<div class="heatmap-cell" data-v="${v}" title="${key}: ${pts} очков"></div>`;
+      }
+      container.innerHTML = html;
+    } else {
+      renderHeatmap(history);
+    }
+  });
+});
+
+// ==================== POMODORO ====================
+const POMO = {
+  active: false,
+  phase: 'work',   // 'work' | 'short' | 'long'
+  count: 0,        // completed work intervals today
+  remaining: 0,    // seconds left
+  interval: null,
+  taskId: null
+};
+
+function openPomodoroModal() {
+  const task = POMO.taskId ? S.tasks.find(t => t.id === POMO.taskId) : null;
+  const phaseName = { work: 'Работа', short: 'Перерыв', long: 'Длинный перерыв' };
+  const phaseColor = { work: 'var(--accent-light)', short: 'var(--success)', long: 'var(--frozen)' };
+
+  showModal('🍅 Pomodoro', `
+    <div style="text-align:center;padding:8px 0 20px">
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px" id="pomo-phase-label">
+        ${phaseName[POMO.phase]}
+      </div>
+      <div style="font-size:64px;font-weight:700;font-variant-numeric:tabular-nums;color:${phaseColor[POMO.phase]};letter-spacing:-2px;line-height:1;margin-bottom:4px" id="pomo-timer-display">
+        ${formatTime(POMO.remaining || getPomoDuration(), true)}
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px" id="pomo-count-label">
+        Помидоров сегодня: <b style="color:var(--accent-light)">${POMO.count}</b>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div class="form-label" style="text-align:left">Задача (опционально)</div>
+        <select class="form-select" id="pomo-task-select">
+          <option value="">Без привязки к задаче</option>
+          ${S.tasks.filter(t=>t.status==='active').map(t=>`<option value="${t.id}" ${POMO.taskId===t.id?'selected':''}>${esc(t.title)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        ${POMO.active
+          ? `<button class="btn btn-danger" onclick="stopPomodoro()">⏹ Стоп</button>
+             <button class="btn btn-ghost" onclick="skipPomoPhase()">⏭ Пропустить</button>`
+          : `<button class="btn btn-primary" style="min-width:140px" onclick="startPomodoro()">▶ Старт</button>`
+        }
+        <button class="btn btn-ghost" onclick="resetPomodoro()">↺ Сброс</button>
+      </div>
+
+      <div style="margin-top:24px">
+        <div class="form-label" style="text-align:left;margin-bottom:8px">Фазы</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;text-align:center;padding:10px;border-radius:10px;background:${POMO.phase==='work'?'rgba(124,58,237,0.2)':'var(--surface)'};border:1px solid ${POMO.phase==='work'?'var(--accent-light)':'var(--border)'}">
+            <div style="font-size:18px">🧠</div>
+            <div style="font-size:12px;color:var(--text-secondary)">Работа</div>
+            <div style="font-size:13px;font-weight:600">${S.settings.pomoWork}м</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:10px;border-radius:10px;background:${POMO.phase==='short'?'rgba(16,185,129,0.2)':'var(--surface)'};border:1px solid ${POMO.phase==='short'?'var(--success)':'var(--border)'}">
+            <div style="font-size:18px">☕</div>
+            <div style="font-size:12px;color:var(--text-secondary)">Перерыв</div>
+            <div style="font-size:13px;font-weight:600">${S.settings.pomoShort}м</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:10px;border-radius:10px;background:${POMO.phase==='long'?'rgba(59,130,246,0.2)':'var(--surface)'};border:1px solid ${POMO.phase==='long'?'var(--frozen)':'var(--border)'}">
+            <div style="font-size:18px">🛋️</div>
+            <div style="font-size:12px;color:var(--text-secondary)">Длинный</div>
+            <div style="font-size:13px;font-weight:600">${S.settings.pomoLong}м</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  document.getElementById('pomo-task-select')?.addEventListener('change', e => {
+    POMO.taskId = e.target.value ? +e.target.value : null;
+  });
+
+  if (POMO.active) {
+    startPomoDisplayUpdate();
+  }
+}
+
+function getPomoDuration() {
+  if (POMO.phase === 'work') return S.settings.pomoWork * 60;
+  if (POMO.phase === 'short') return S.settings.pomoShort * 60;
+  return S.settings.pomoLong * 60;
+}
+
+function startPomodoro() {
+  POMO.taskId = +document.getElementById('pomo-task-select')?.value || null;
+  if (!POMO.remaining) POMO.remaining = getPomoDuration();
+  POMO.active = true;
+  clearInterval(POMO.interval);
+  POMO.interval = setInterval(tickPomodoro, 1000);
+  openPomodoroModal();
+}
+
+function tickPomodoro() {
+  if (!POMO.active) return;
+  POMO.remaining--;
+  const display = document.getElementById('pomo-timer-display');
+  if (display) display.textContent = formatTime(POMO.remaining, true);
+  if (POMO.remaining <= 0) {
+    clearInterval(POMO.interval);
+    finishPomoPhase();
+  }
+}
+
+function startPomoDisplayUpdate() {
+  clearInterval(POMO.displayInterval);
+  POMO.displayInterval = setInterval(() => {
+    const display = document.getElementById('pomo-timer-display');
+    if (display) display.textContent = formatTime(POMO.remaining, true);
+    const countEl = document.getElementById('pomo-count-label');
+    if (countEl) countEl.innerHTML = `Помидоров сегодня: <b style="color:var(--accent-light)">${POMO.count}</b>`;
+  }, 500);
+}
+
+async function finishPomoPhase() {
+  const phaseName = { work: 'Работа', short: 'Перерыв', long: 'Длинный перерыв' };
+
+  if (POMO.phase === 'work') {
+    POMO.count++;
+    // Add timer session to task if bound
+    if (POMO.taskId) {
+      const duration = S.settings.pomoWork * 60;
+      const task = S.tasks.find(t => t.id === POMO.taskId);
+      if (task) {
+        const session = { start: Date.now() - duration * 1000, end: Date.now(), duration };
+        const sessions = [...(task.timer_sessions || []), session];
+        await updateTask(POMO.taskId, { time_spent: (task.time_spent || 0) + duration, timer_sessions: sessions });
+      }
+    }
+
+    const shouldLong = POMO.count % (S.settings.pomoCount || 4) === 0;
+    POMO.phase = shouldLong ? 'long' : 'short';
+    if (S.settings.notifEnabled) {
+      scheduleNotif('pomo-phase', 0, '🍅 Помидор завершён!', `Время ${shouldLong ? 'длинного' : 'короткого'} перерыва — ${shouldLong ? S.settings.pomoLong : S.settings.pomoShort} мин`);
+    }
+    toast(`🍅 Помидор #${POMO.count} готов! Перерыв ${shouldLong ? S.settings.pomoLong : S.settings.pomoShort} мин`, 'success');
+  } else {
+    POMO.phase = 'work';
+    if (S.settings.notifEnabled) {
+      scheduleNotif('pomo-work', 0, '⏰ Перерыв закончился', 'Время работать! Следующий помидор.');
+    }
+    toast('▶️ Перерыв закончился, время работать!', 'info');
+  }
+
+  POMO.remaining = getPomoDuration();
+  POMO.active = false;
+  POMO.interval = null;
+
+  // Auto-open updated modal
+  openPomodoroModal();
+}
+
+function skipPomoPhase() {
+  clearInterval(POMO.interval);
+  POMO.remaining = 0;
+  finishPomoPhase();
+}
+
+function stopPomodoro() {
+  clearInterval(POMO.interval);
+  clearInterval(POMO.displayInterval);
+  POMO.active = false;
+  POMO.remaining = 0;
+  openPomodoroModal();
+}
+
+function resetPomodoro() {
+  clearInterval(POMO.interval);
+  clearInterval(POMO.displayInterval);
+  POMO.active = false;
+  POMO.phase = 'work';
+  POMO.count = 0;
+  POMO.remaining = 0;
+  openPomodoroModal();
+}
+
+// ==================== WEEKLY REPORT ====================
+async function showWeeklyReport() {
+  const history = await db.history.toArray();
+  const now = new Date();
+
+  // This week (Mon–Sun)
+  const dayOfWeek = (now.getDay() + 6) % 7; // Mon=0
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - dayOfWeek);
+  weekStart.setHours(0, 0, 0, 0);
+
+  // Last week
+  const lastWeekStart = new Date(weekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const lastWeekEnd = new Date(weekStart);
+
+  const thisWeekHistory = history.filter(h => new Date(h.date) >= weekStart);
+  const lastWeekHistory = history.filter(h => new Date(h.date) >= lastWeekStart && new Date(h.date) < lastWeekEnd);
+
+  const thisPoints = thisWeekHistory.reduce((a, h) => a + (h.points > 0 ? h.points : 0), 0);
+  const lastPoints = lastWeekHistory.reduce((a, h) => a + (h.points > 0 ? h.points : 0), 0);
+  const pctChange = lastPoints ? Math.round((thisPoints - lastPoints) / lastPoints * 100) : null;
+
+  const thisDone = thisWeekHistory.filter(h => h.type === 'done').length;
+  const thisDropped = thisWeekHistory.filter(h => h.type === 'dropped').length;
+
+  const thisWeekDates = new Set(thisWeekHistory.map(h => h.date));
+  const frozen = S.tasks.filter(t => t.status === 'frozen').length;
+
+  // Top-3 tasks by time this week
+  const thisWeekTaskIds = [...new Set(thisWeekHistory.map(h => h.task_id))];
+  const top3 = thisWeekTaskIds
+    .map(id => S.tasks.find(t => t.id === id))
+    .filter(Boolean)
+    .sort((a, b) => (b.time_spent || 0) - (a.time_spent || 0))
+    .slice(0, 3);
+
+  const changeHtml = pctChange !== null
+    ? `<span style="color:${pctChange >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:600">${pctChange >= 0 ? '▲' : '▼'} ${Math.abs(pctChange)}%</span> к прошлой неделе`
+    : 'первая неделя статистики';
+
+  showModal('📊 Итоги недели', `
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">
+        ${weekStart.toLocaleDateString('ru-RU', {day:'numeric',month:'long'})} — ${now.toLocaleDateString('ru-RU', {day:'numeric',month:'long'})}
+      </div>
+      <div style="font-size:48px;font-weight:700;color:var(--accent-light);line-height:1">${thisPoints}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">очков · ${changeHtml}</div>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:20px">
+      <div class="card stat-card">
+        <div class="stat-num" style="color:var(--success)">${thisDone}</div>
+        <div class="stat-label">Выполнено</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-num" style="color:var(--danger)">${thisDropped}</div>
+        <div class="stat-label">Брошено</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-num" style="color:var(--frozen)">${frozen}</div>
+        <div class="stat-label">Заморожено</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-num">${thisWeekDates.size}</div>
+        <div class="stat-label">Активных дней</div>
+      </div>
+    </div>
+
+    ${top3.length ? `
+    <div>
+      <div class="section-header" style="margin-top:0">
+        <span class="section-title">Топ-3 по времени</span>
+      </div>
+      ${top3.map((t, i) => {
+        const cat = S.categories.find(c => c.id === t.category_id);
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:22px;width:28px;text-align:center">${['🥇','🥈','🥉'][i]}</div>
+          <div style="font-size:18px">${cat ? cat.icon : '📋'}</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500">${esc(t.title)}</div>
+            <div style="font-size:12px;color:var(--text-secondary)">${cat ? cat.name : 'Без категории'}</div>
+          </div>
+          <div style="font-size:13px;color:var(--accent-light);font-weight:600">${formatTime(t.time_spent || 0)}</div>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <button class="btn btn-primary" style="width:100%;margin-top:20px" onclick="closeModal()">Закрыть</button>
+  `);
+}
+
+// Schedule weekly report on Sunday 20:00
+function scheduleWeeklyReport() {
+  if (!S.settings.notifEnabled) return;
+  const now = new Date();
+  const target = new Date();
+  // Find next Sunday
+  const daysUntilSunday = (7 - now.getDay()) % 7 || 7;
+  target.setDate(now.getDate() + daysUntilSunday);
+  target.setHours(20, 0, 0, 0);
+  const delay = target - now;
+  scheduleNotif('weekly-report', delay, '📊 Итоги недели', 'Посмотри, что удалось сделать за эту неделю!');
+}
+
+// ==================== AGGRESSIVE REMINDERS ====================
+function startAggressiveReminders() {
+  const aggressiveTasks = S.tasks.filter(t =>
+    t.status === 'active' &&
+    t.reminder?.enabled &&
+    t.reminder?.aggressive &&
+    t.progress < 100
+  );
+  aggressiveTasks.forEach(task => {
+    const interval = (task.reminder.interval_minutes || S.settings.notifInterval || 15) * 60 * 1000;
+    scheduleNotif(
+      'aggressive-' + task.id,
+      interval,
+      '🔔 Напоминание',
+      `Задача "${task.title}" ещё не выполнена!`
+    );
+  });
+}
+
+// ==================== RECURRING TASKS ====================
+async function checkRecurringTasks() {
+  const today = todayStr();
+  const recurring = S.tasks.filter(t => t.is_recurring && t.recurrence && t.status === 'done');
+  for (const task of recurring) {
+    const lastUpdate = task.updated_at ? new Date(task.updated_at).toISOString().slice(0,10) : null;
+    if (lastUpdate && lastUpdate < today) {
+      // Reset task for new day/week
+      const shouldReset = task.recurrence.type === 'daily' ||
+        (task.recurrence.type === 'weekly' && isNewWeek(lastUpdate, today));
+      if (shouldReset) {
+        await updateTask(task.id, {
+          status: 'active',
+          progress: 0,
+          updated_at: Date.now()
+        });
+        toast(`🔄 Задача "${task.title.slice(0,20)}" сброшена`, 'info');
+      }
+    }
+  }
+}
+
+function isNewWeek(dateStr1, dateStr2) {
+  const d1 = new Date(dateStr1);
+  const d2 = new Date(dateStr2);
+  const week1 = Math.floor(d1.getTime() / (7 * 86400000));
+  const week2 = Math.floor(d2.getTime() / (7 * 86400000));
+  return week1 !== week2;
+}
+
+// ==================== QUICK STATS WIDGET (home) ====================
+function renderQuickStats() {
+  const active = S.tasks.filter(t => t.status === 'active' && !isTaskLocked(t)).length;
+  const locked = S.tasks.filter(t => t.status === 'active' && isTaskLocked(t)).length;
+  const overdue = S.tasks.filter(t => t.deadline && Date.now() > t.deadline && t.status === 'active').length;
+
+  const existingWidget = document.getElementById('quick-stats-widget');
+  if (existingWidget) existingWidget.remove();
+
+  if (!active && !overdue && !locked) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'quick-stats-widget';
+  widget.style.cssText = 'display:flex;gap:8px;margin-bottom:14px';
+  widget.innerHTML = `
+    ${active ? `<div style="flex:1;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:10px 12px;text-align:center">
+      <div style="font-size:20px;font-weight:700;color:var(--accent-light)">${active}</div>
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.3px">активных</div>
+    </div>` : ''}
+    ${locked ? `<div style="flex:1;background:rgba(107,114,128,0.1);border:1px solid rgba(107,114,128,0.15);border-radius:12px;padding:10px 12px;text-align:center">
+      <div style="font-size:20px;font-weight:700;color:var(--text-muted)">🔒 ${locked}</div>
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.3px">заблок.</div>
+    </div>` : ''}
+    ${overdue ? `<div style="flex:1;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:10px 12px;text-align:center">
+      <div style="font-size:20px;font-weight:700;color:var(--danger)">${overdue}</div>
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.3px">просрочено</div>
+    </div>` : ''}
+  `;
+  const tasksList = document.getElementById('tasks-list');
+  if (tasksList) tasksList.parentNode.insertBefore(widget, tasksList);
+}
+
+// ==================== ADD POMODORO BTN & WEEKLY REPORT TO UI ====================
+function injectExtraUI() {
+  // Add Pomodoro FAB to home page header area
+  const pageHeader = document.querySelector('#page-home .page-header');
+  if (pageHeader) {
+    const pomoBtn = document.createElement('button');
+    pomoBtn.className = 'btn btn-ghost btn-sm';
+    pomoBtn.innerHTML = '🍅';
+    pomoBtn.title = 'Pomodoro';
+    pomoBtn.style.cssText = 'margin-left:8px;font-size:18px;width:40px;padding:0;height:40px';
+    pomoBtn.addEventListener('click', openPomodoroModal);
+
+    const reportBtn = document.createElement('button');
+    reportBtn.className = 'btn btn-ghost btn-sm';
+    reportBtn.innerHTML = '📊';
+    reportBtn.title = 'Итоги недели';
+    reportBtn.style.cssText = 'margin-left:6px;font-size:18px;width:40px;padding:0;height:40px';
+    reportBtn.addEventListener('click', showWeeklyReport);
+
+    const headerRight = document.createElement('div');
+    headerRight.style.display = 'flex';
+    headerRight.appendChild(pomoBtn);
+    headerRight.appendChild(reportBtn);
+
+    // Wrap existing streak chip and add new buttons
+    const streakChip = document.getElementById('streak-chip');
+    const rightArea = document.createElement('div');
+    rightArea.style.cssText = 'display:flex;align-items:center;gap:6px';
+    if (streakChip) {
+      streakChip.parentNode.insertBefore(rightArea, streakChip);
+      rightArea.appendChild(streakChip);
+    }
+    rightArea.appendChild(pomoBtn);
+    rightArea.appendChild(reportBtn);
+  }
+
+  // Add pomodoro section to timer pill
+  const pill = document.getElementById('timer-pill');
+  if (pill) {
+    const pomoLink = document.createElement('button');
+    pomoLink.className = 'timer-pill-btn';
+    pomoLink.title = 'Pomodoro';
+    pomoLink.textContent = '🍅';
+    pomoLink.addEventListener('click', openPomodoroModal);
+    pill.insertBefore(pomoLink, pill.querySelector('#timer-pause-btn'));
+  }
+}
+
+// ==================== KEYBOARD SHORTCUTS ====================
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'n' || e.key === 'N') openTaskForm();
+  if (e.key === 'Escape') {
+    closeModal();
+    closeCtx();
+    document.getElementById('confirm-overlay').classList.remove('active');
+  }
+  if (e.key === 'p' || e.key === 'P') openPomodoroModal();
+  if (e.key === 'r' || e.key === 'R') showWeeklyReport();
+});
+
+// ==================== OVERDUE DEADLINE CHECK ====================
+function checkOverdueDeadlines() {
+  if (!S.settings.notifEnabled) return;
+  const now = Date.now();
+  S.tasks.filter(t =>
+    t.status === 'active' &&
+    t.deadline &&
+    t.deadline > now &&
+    t.deadline - now < (S.settings.notifBefore || 30) * 60 * 1000
+  ).forEach(task => {
+    const minsLeft = Math.round((task.deadline - now) / 60000);
+    if (minsLeft > 0 && minsLeft <= (S.settings.notifBefore || 30)) {
+      scheduleNotif(
+        'deadline-soon-' + task.id,
+        task.deadline - now - (S.settings.notifBefore || 30) * 60000,
+        '⏰ Дедлайн скоро!',
+        `До дедлайна "${task.title}" осталось ${minsLeft} мин`
+      );
+    }
+  });
+}
+
+// ==================== EXTENDED INIT ====================
+async function initExtended() {
+  await checkRecurringTasks();
+  injectExtraUI();
+  checkOverdueDeadlines();
+  startAggressiveReminders();
+  scheduleWeeklyReport();
+}
+
+// ==================== START ====================
+init().then(() => initExtended());
+</script>
+</body>
+</html>
